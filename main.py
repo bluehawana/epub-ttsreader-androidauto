@@ -7,15 +7,12 @@ from pathlib import Path
 import tempfile
 import uuid
 from datetime import datetime
-import pymysql
-from urllib.parse import urlparse
 import boto3
 from botocore.exceptions import ClientError
+import json
 
 # Import our services
 from azure_tts import AzureTTSService
-from bot import EpubAudiobookBot
-from podcast import PodcastGenerator
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -27,39 +24,23 @@ CORS(app)
 
 # Initialize services
 tts_service = AzureTTSService()
-podcast_gen = PodcastGenerator()
 
-# Database connection
-def get_db_connection():
-    database_url = os.environ.get('JAWSDB_URL') or os.environ.get('DATABASE_URL')
-    if database_url:
-        # Parse JawsDB MySQL URL: mysql://username:password@hostname:port/database
-        parsed = urlparse(database_url)
-        conn = pymysql.connect(
-            host=parsed.hostname,
-            port=parsed.port or 3306,
-            user=parsed.username,
-            password=parsed.password,
-            database=parsed.path[1:],  # Remove leading slash
-            charset='utf8mb4',
-            autocommit=True
-        )
-        return conn
-    return None
-
-# AWS S3 for file storage (Heroku addon)
-def get_s3_client():
-    aws_access_key = os.environ.get('AWS_ACCESS_KEY_ID')
-    aws_secret_key = os.environ.get('AWS_SECRET_ACCESS_KEY')  
-    bucket_name = os.environ.get('S3_BUCKET_NAME')
+# Cloudflare R2 storage
+def get_r2_client():
+    r2_endpoint = os.environ.get('R2_ENDPOINT_URL')
+    r2_access_key = os.environ.get('R2_ACCESS_KEY_ID')
+    r2_secret_key = os.environ.get('R2_SECRET_ACCESS_KEY')
+    r2_bucket = os.environ.get('R2_BUCKET_NAME')
     
-    if aws_access_key and aws_secret_key:
-        s3 = boto3.client(
+    if r2_endpoint and r2_access_key and r2_secret_key:
+        r2 = boto3.client(
             's3',
-            aws_access_key_id=aws_access_key,
-            aws_secret_access_key=aws_secret_key
+            endpoint_url=r2_endpoint,
+            aws_access_key_id=r2_access_key,
+            aws_secret_access_key=r2_secret_key,
+            region_name='auto'  # Cloudflare R2 uses 'auto'
         )
-        return s3, bucket_name
+        return r2, r2_bucket
     return None, None
 
 @app.route('/')
@@ -68,28 +49,32 @@ def home():
         'service': 'EPUB to Audiobook Service',
         'status': 'running',
         'description': 'Convert EPUB files to audiobooks using Azure TTS',
+        'storage': 'Cloudflare R2',
         'endpoints': {
             'health': '/health',
             'process_epub': '/api/process-epub (POST)',
-            'get_audiobooks': '/api/audiobooks/{user_id}',
-            'stream_chapter': '/api/stream/{book_id}?chapter=1'
+            'list_audiobooks': '/api/audiobooks/{user_id}',
+            'download_audiobook': '/api/download/{audiobook_id}'
         },
-        'version': '1.0.0',
-        'documentation': 'https://github.com/your-repo/epub-audiobook-bot'
+        'version': '2.0.0 - Simplified R2 Storage'
     })
 
 @app.route('/health')
 def health():
+    r2, bucket = get_r2_client()
+    storage_status = 'connected' if r2 else 'not_configured'
+    
     return jsonify({
         'status': 'healthy',
         'service': 'epub-audiobook-cloud',
         'tts': 'azure' if not tts_service.use_edge_tts else 'edge',
+        'storage': f'cloudflare_r2_{storage_status}',
         'timestamp': datetime.now().isoformat()
     })
 
 @app.route('/api/process-epub', methods=['POST'])
 def process_epub():
-    """Process EPUB from Telegram bot"""
+    """Process EPUB from Telegram bot and store in R2"""
     try:
         data = request.get_json()
         user_id = data.get('user_id')
@@ -106,6 +91,7 @@ def process_epub():
             'job_id': job_id,
             'status': 'processing',
             'message': f'Converting "{book_title}" to audiobook...',
+            'storage': 'cloudflare_r2',
             'estimated_time': '5-10 minutes'
         })
         
@@ -114,7 +100,7 @@ def process_epub():
         return jsonify({'error': str(e)}), 500
 
 async def process_epub_async(job_id: str, user_id: str, book_title: str, epub_data: str):
-    """Async EPUB processing pipeline"""
+    """Simplified EPUB processing - just convert and store in R2"""
     try:
         logger.info(f"Starting EPUB processing for job {job_id}")
         
@@ -122,8 +108,16 @@ async def process_epub_async(job_id: str, user_id: str, book_title: str, epub_da
         chapters = extract_chapters_from_epub(epub_data)
         logger.info(f"Extracted {len(chapters)} chapters")
         
-        # 2. Convert each chapter to MP3
-        mp3_files = []
+        audiobook_metadata = {
+            'job_id': job_id,
+            'user_id': user_id,
+            'book_title': book_title,
+            'chapters': [],
+            'created_at': datetime.now().isoformat(),
+            'status': 'completed'
+        }
+        
+        # 2. Convert each chapter to MP3 and upload to R2
         for i, chapter in enumerate(chapters):
             logger.info(f"Converting chapter {i+1}/{len(chapters)}")
             
@@ -139,29 +133,140 @@ async def process_epub_async(job_id: str, user_id: str, book_title: str, epub_da
             )
             
             if success:
-                # Upload to S3
-                s3_url = upload_to_s3(mp3_path, f"{user_id}/{job_id}/chapter_{i+1}.mp3")
-                if s3_url:
-                    mp3_files.append({
+                # Upload to R2
+                r2_key = f"{user_id}/{job_id}/chapter_{i+1}.mp3"
+                r2_url = upload_to_r2(mp3_path, r2_key)
+                
+                if r2_url:
+                    audiobook_metadata['chapters'].append({
                         'chapter': i + 1,
                         'title': chapter['title'],
-                        'url': s3_url,
+                        'url': r2_url,
+                        'r2_key': r2_key,
                         'duration': get_mp3_duration(mp3_path)
                     })
                 
                 # Cleanup temp file
                 os.unlink(mp3_path)
         
-        # 3. Save to database
-        save_audiobook_to_db(user_id, job_id, book_title, mp3_files)
+        # 3. Save audiobook metadata to R2 as JSON
+        metadata_key = f"{user_id}/{job_id}/metadata.json"
+        save_metadata_to_r2(audiobook_metadata, metadata_key)
         
-        # 4. Create podcast feed
-        podcast_gen.add_audiobook_episode(user_id, book_title, mp3_files)
-        
-        logger.info(f"Successfully processed EPUB job {job_id}")
+        logger.info(f"Successfully processed EPUB job {job_id} - {len(audiobook_metadata['chapters'])} chapters stored in R2")
         
     except Exception as e:
         logger.error(f"Async processing failed for job {job_id}: {e}")
+
+def upload_to_r2(file_path: str, r2_key: str) -> str:
+    """Upload file to Cloudflare R2 and return URL"""
+    try:
+        r2, bucket_name = get_r2_client()
+        if not r2 or not bucket_name:
+            logger.warning("R2 not configured, skipping upload")
+            return None
+        
+        r2.upload_file(file_path, bucket_name, r2_key)
+        # Cloudflare R2 public URL format
+        url = f"https://pub-{bucket_name}.r2.dev/{r2_key}"
+        return url
+        
+    except Exception as e:
+        logger.error(f"R2 upload failed: {e}")
+        return None
+
+def save_metadata_to_r2(metadata: dict, r2_key: str):
+    """Save audiobook metadata as JSON to R2"""
+    try:
+        r2, bucket_name = get_r2_client()
+        if not r2 or not bucket_name:
+            return
+        
+        # Upload JSON metadata
+        r2.put_object(
+            Bucket=bucket_name,
+            Key=r2_key,
+            Body=json.dumps(metadata, indent=2),
+            ContentType='application/json'
+        )
+        logger.info(f"Saved metadata to R2: {r2_key}")
+        
+    except Exception as e:
+        logger.error(f"Failed to save metadata to R2: {e}")
+
+@app.route('/api/audiobooks/<user_id>')
+def get_audiobooks(user_id):
+    """Get user's audiobook library from R2"""
+    try:
+        r2, bucket_name = get_r2_client()
+        if not r2 or not bucket_name:
+            return jsonify({'audiobooks': [], 'total': 0})
+        
+        # List user's audiobooks in R2
+        prefix = f"{user_id}/"
+        response = r2.list_objects_v2(Bucket=bucket_name, Prefix=prefix, Delimiter='/')
+        
+        audiobooks = []
+        for obj in response.get('CommonPrefixes', []):
+            # Each folder is a job_id (audiobook)
+            job_folder = obj['Prefix']
+            metadata_key = f"{job_folder}metadata.json"
+            
+            try:
+                # Get metadata
+                metadata_obj = r2.get_object(Bucket=bucket_name, Key=metadata_key)
+                metadata = json.loads(metadata_obj['Body'].read())
+                
+                audiobooks.append({
+                    'id': metadata['job_id'],
+                    'title': metadata['book_title'],
+                    'chapters': len(metadata['chapters']),
+                    'created_at': metadata['created_at'],
+                    'download_url': f'/api/download/{metadata["job_id"]}'
+                })
+            except Exception as e:
+                logger.warning(f"Could not load metadata for {metadata_key}: {e}")
+        
+        return jsonify({'audiobooks': audiobooks, 'total': len(audiobooks)})
+        
+    except Exception as e:
+        logger.error(f"Get audiobooks failed: {e}")
+        return jsonify({'audiobooks': [], 'total': 0})
+
+@app.route('/api/download/<audiobook_id>')
+def download_audiobook(audiobook_id):
+    """Get download URLs for all chapters of an audiobook"""
+    try:
+        r2, bucket_name = get_r2_client()
+        if not r2 or not bucket_name:
+            return jsonify({'error': 'Storage not available'}), 500
+        
+        # Find the audiobook metadata
+        # We need to scan user folders since we don't store user_id in the route
+        response = r2.list_objects_v2(Bucket=bucket_name, Prefix="", Delimiter='/')
+        
+        for prefix_obj in response.get('CommonPrefixes', []):
+            user_folder = prefix_obj['Prefix']
+            metadata_key = f"{user_folder}{audiobook_id}/metadata.json"
+            
+            try:
+                metadata_obj = r2.get_object(Bucket=bucket_name, Key=metadata_key)
+                metadata = json.loads(metadata_obj['Body'].read())
+                
+                return jsonify({
+                    'audiobook_id': audiobook_id,
+                    'title': metadata['book_title'],
+                    'chapters': metadata['chapters'],
+                    'total_chapters': len(metadata['chapters'])
+                })
+            except:
+                continue
+        
+        return jsonify({'error': 'Audiobook not found'}), 404
+        
+    except Exception as e:
+        logger.error(f"Download request failed: {e}")
+        return jsonify({'error': str(e)}), 500
 
 def extract_chapters_from_epub(epub_data: str) -> list:
     """Extract chapters from base64 EPUB data"""

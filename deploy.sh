@@ -1,7 +1,7 @@
 #!/bin/bash
-# Heroku Deployment Script for EPUB Audiobook Service
+# Heroku Deployment Script for EPUB Audiobook Service with Cloudflare R2
 
-echo "🚀 Deploying EPUB Audiobook Service to Heroku..."
+echo "🚀 Deploying EPUB Audiobook Service to Heroku (R2 Storage)..."
 
 # Check if Heroku CLI is installed
 if ! command -v heroku &> /dev/null; then
@@ -18,48 +18,46 @@ heroku auth:whoami || {
 }
 
 # Create Heroku app
-APP_NAME="epub-audiobook-service"
+APP_NAME="epub-audiobook-r2"
 echo "🏗️  Creating Heroku app: $APP_NAME"
 heroku create $APP_NAME --region us
 
-# Add JawsDB MySQL addon (much cheaper than PostgreSQL!)
-echo "🗄️  Adding JawsDB MySQL database..."
-heroku addons:create jawsdb:kitefin --app $APP_NAME
-
-# Add S3 file storage (using Bucketeer addon)
-echo "📦 Adding S3 file storage..."
-heroku addons:create bucketeer:hobbyist --app $APP_NAME
+# No database or S3 addons needed - we use Cloudflare R2!
+echo "📦 Using Cloudflare R2 for storage (no Heroku addons needed)"
 
 # Set environment variables
 echo "⚙️  Setting environment variables..."
 
-# You'll need to set these manually:
+# Set Telegram bot token
+heroku config:set TELEGRAM_BOT_TOKEN=8043237984:AAGOCQYtGyxTr9Jrwk6u9bN2bkoWts-qAFQ --app $APP_NAME
+
 echo "⚠️  MANUAL SETUP REQUIRED:"
-echo "   Set your Azure Speech API key:"
-echo "   heroku config:set AZURE_SPEECH_KEY=your_key_here --app $APP_NAME"
-echo "   heroku config:set AZURE_SPEECH_REGION=eastus --app $APP_NAME"
+echo "   1. Create Cloudflare R2 bucket at: https://dash.cloudflare.com/r2"
+echo "   2. Get R2 API credentials and set:"
+echo "   heroku config:set R2_ENDPOINT_URL=https://your-account-id.r2.cloudflarestorage.com --app $APP_NAME"
+echo "   heroku config:set R2_ACCESS_KEY_ID=your_key --app $APP_NAME"
+echo "   heroku config:set R2_SECRET_ACCESS_KEY=your_secret --app $APP_NAME"
+echo "   heroku config:set R2_BUCKET_NAME=your_bucket_name --app $APP_NAME"
 echo ""
-echo "   Set your Telegram bot token:"
-echo "   heroku config:set TELEGRAM_BOT_TOKEN=8043237984:AAGOCQYtGyxTr9Jrwk6u9bN2bkoWts-qAFQ --app $APP_NAME"
+echo "   3. Optional - Set Azure Speech API key for better TTS:"
+echo "   heroku config:set AZURE_SPEECH_KEY=your_key_here --app $APP_NAME"
 echo ""
 
 # Deploy to Heroku
 echo "🚀 Deploying application..."
 git add .
-git commit -m "Deploy EPUB audiobook service to Heroku with MySQL"
+git commit -m "Simplify to Cloudflare R2 storage - no database needed"
 heroku git:remote -a $APP_NAME
 git push heroku main
 
-# Run database migrations
-echo "🗄️  Setting up MySQL database schema..."
-# Get JawsDB connection details and run schema
-heroku config:get JAWSDB_URL --app $APP_NAME
-echo "Run this command to set up the database:"
-echo "mysql -h <host> -u <user> -p<password> <database> < schema.sql"
-
-# Open the deployed app
 echo "✅ Deployment complete!"
 echo "🌐 App URL: https://$APP_NAME.herokuapp.com"
 echo "📊 View logs: heroku logs --tail --app $APP_NAME"
+echo ""
+echo "💡 Benefits of R2 storage:"
+echo "   ✅ No database costs"
+echo "   ✅ Cheaper than S3"
+echo "   ✅ Simple file storage"
+echo "   ✅ Global CDN included"
 
 heroku open --app $APP_NAME
