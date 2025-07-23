@@ -10,6 +10,9 @@ from datetime import datetime
 import boto3
 from botocore.exceptions import ClientError
 import json
+import threading
+import time
+import base64
 
 # Import our services
 from azure_tts import AzureTTSService
@@ -69,6 +72,8 @@ def health():
         'service': 'epub-audiobook-cloud',
         'tts': 'azure' if not tts_service.use_edge_tts else 'edge',
         'storage': f'cloudflare_r2_{storage_status}',
+        'r2_scanner': 'active',
+        'processed_epubs': len(processed_epubs),
         'timestamp': datetime.now().isoformat()
     })
 
@@ -314,6 +319,100 @@ def download_audiobook(audiobook_id):
         logger.error(f"Download request failed: {e}")
         return jsonify({'error': str(e)}), 500
 
+# R2 EPUB Scanner - Background Process
+processed_epubs = set()  # Track processed files
+
+def scan_r2_for_epubs():
+    """Background thread to scan R2 for new EPUB files and process them"""
+    logger.info("🔍 Starting R2 EPUB scanner...")
+    
+    while True:
+        try:
+            r2, bucket_name = get_r2_client()
+            if not r2 or not bucket_name:
+                logger.warning("R2 not configured for scanning")
+                time.sleep(60)
+                continue
+            
+            # Scan for EPUB files in user folders
+            response = r2.list_objects_v2(Bucket=bucket_name, Prefix="")
+            
+            for obj in response.get('Contents', []):
+                key = obj['Key']
+                
+                # Look for EPUB files in epubs/ folders
+                if '/epubs/' in key and key.endswith('.epub'):
+                    if key not in processed_epubs:
+                        logger.info(f"📚 Found new EPUB: {key}")
+                        process_epub_from_r2(key)
+                        processed_epubs.add(key)
+            
+            # Sleep for 30 seconds before next scan
+            time.sleep(30)
+            
+        except Exception as e:
+            logger.error(f"R2 scanning error: {e}")
+            time.sleep(60)
+
+def process_epub_from_r2(r2_key: str):
+    """Process EPUB file from R2 storage"""
+    try:
+        r2, bucket_name = get_r2_client()
+        if not r2 or not bucket_name:
+            return
+        
+        # Extract user_id and filename from key: user_id/epubs/filename.epub
+        parts = r2_key.split('/')
+        if len(parts) >= 3:
+            user_id = parts[0]
+            filename = parts[-1]
+            book_title = filename.replace('.epub', '')
+            
+            logger.info(f"📖 Processing EPUB: {book_title} for user {user_id}")
+            
+            # Download EPUB from R2
+            epub_data = download_epub_from_r2(r2_key)
+            if epub_data:
+                # Generate job ID
+                job_id = str(uuid.uuid4())
+                
+                # Start async processing
+                asyncio.create_task(process_epub_async(job_id, user_id, book_title, epub_data))
+                logger.info(f"🎧 Started TTS conversion job {job_id}")
+        
+    except Exception as e:
+        logger.error(f"Error processing EPUB from R2 {r2_key}: {e}")
+
+def download_epub_from_r2(r2_key: str) -> str:
+    """Download EPUB file from R2 and return as base64"""
+    try:
+        r2, bucket_name = get_r2_client()
+        if not r2 or not bucket_name:
+            return None
+        
+        # Download file
+        response = r2.get_object(Bucket=bucket_name, Key=r2_key)
+        epub_bytes = response['Body'].read()
+        
+        # Convert to base64
+        epub_b64 = base64.b64encode(epub_bytes).decode('utf-8')
+        logger.info(f"📥 Downloaded EPUB from R2: {r2_key}")
+        return epub_b64
+        
+    except Exception as e:
+        logger.error(f"Error downloading EPUB from R2 {r2_key}: {e}")
+        return None
+
+# Start background scanner thread
+def start_r2_scanner():
+    """Start the R2 scanner in a background thread"""
+    scanner_thread = threading.Thread(target=scan_r2_for_epubs, daemon=True)
+    scanner_thread.start()
+    logger.info("🚀 R2 EPUB scanner started!")
+
 if __name__ == '__main__':
+    # Start R2 scanner
+    start_r2_scanner()
+    
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
