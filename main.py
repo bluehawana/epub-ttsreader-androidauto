@@ -1,6 +1,6 @@
 import os
 import logging
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify
 from flask_cors import CORS
 import asyncio
 from pathlib import Path
@@ -158,6 +158,43 @@ async def process_epub_async(job_id: str, user_id: str, book_title: str, epub_da
     except Exception as e:
         logger.error(f"Async processing failed for job {job_id}: {e}")
 
+def extract_chapters_from_epub(epub_data: str) -> list:
+    """Extract chapters from base64 EPUB data"""
+    import base64
+    import ebooklib
+    from ebooklib import epub
+    import re
+    
+    # Decode base64 EPUB data
+    epub_bytes = base64.b64decode(epub_data)
+    
+    # Create temp file
+    with tempfile.NamedTemporaryFile(suffix='.epub', delete=False) as tmp_file:
+        tmp_file.write(epub_bytes)
+        epub_path = tmp_file.name
+    
+    try:
+        book = epub.read_epub(epub_path)
+        chapters = []
+        
+        for item in book.get_items():
+            if item.get_type() == ebooklib.ITEM_DOCUMENT:
+                content = item.get_content().decode('utf-8')
+                # Remove HTML tags
+                text = re.sub(r'<[^>]+>', '', content)
+                text = text.strip()
+                
+                if text and len(text) > 100:
+                    chapters.append({
+                        'title': item.get_name() or f"Chapter {len(chapters) + 1}",
+                        'text': text[:10000]  # Limit for demo
+                    })
+        
+        return chapters
+        
+    finally:
+        os.unlink(epub_path)
+
 def upload_to_r2(file_path: str, r2_key: str) -> str:
     """Upload file to Cloudflare R2 and return URL"""
     try:
@@ -193,6 +230,15 @@ def save_metadata_to_r2(metadata: dict, r2_key: str):
         
     except Exception as e:
         logger.error(f"Failed to save metadata to R2: {e}")
+
+def get_mp3_duration(file_path: str) -> int:
+    """Get MP3 duration in seconds"""
+    try:
+        from pydub import AudioSegment
+        audio = AudioSegment.from_mp3(file_path)
+        return len(audio) // 1000  # Convert to seconds
+    except:
+        return 0  # Default duration
 
 @app.route('/api/audiobooks/<user_id>')
 def get_audiobooks(user_id):
@@ -266,168 +312,6 @@ def download_audiobook(audiobook_id):
         
     except Exception as e:
         logger.error(f"Download request failed: {e}")
-        return jsonify({'error': str(e)}), 500
-
-def extract_chapters_from_epub(epub_data: str) -> list:
-    """Extract chapters from base64 EPUB data"""
-    import base64
-    import ebooklib
-    from ebooklib import epub
-    import re
-    
-    # Decode base64 EPUB data
-    epub_bytes = base64.b64decode(epub_data)
-    
-    # Create temp file
-    with tempfile.NamedTemporaryFile(suffix='.epub', delete=False) as tmp_file:
-        tmp_file.write(epub_bytes)
-        epub_path = tmp_file.name
-    
-    try:
-        book = epub.read_epub(epub_path)
-        chapters = []
-        
-        for item in book.get_items():
-            if item.get_type() == ebooklib.ITEM_DOCUMENT:
-                content = item.get_content().decode('utf-8')
-                # Remove HTML tags
-                text = re.sub(r'<[^>]+>', '', content)
-                text = text.strip()
-                
-                if text and len(text) > 100:
-                    chapters.append({
-                        'title': item.get_name() or f"Chapter {len(chapters) + 1}",
-                        'text': text[:10000]  # Limit for demo
-                    })
-        
-        return chapters
-        
-    finally:
-        os.unlink(epub_path)
-
-def upload_to_s3(file_path: str, s3_key: str) -> str:
-    """Upload file to S3 and return URL"""
-    try:
-        s3, bucket_name = get_s3_client()
-        if not s3 or not bucket_name:
-            logger.warning("S3 not configured, skipping upload")
-            return None
-        
-        s3.upload_file(file_path, bucket_name, s3_key)
-        url = f"https://{bucket_name}.s3.amazonaws.com/{s3_key}"
-        return url
-        
-    except Exception as e:
-        logger.error(f"S3 upload failed: {e}")
-        return None
-
-def get_mp3_duration(file_path: str) -> int:
-    """Get MP3 duration in seconds"""
-    try:
-        from pydub import AudioSegment
-        audio = AudioSegment.from_mp3(file_path)
-        return len(audio) // 1000  # Convert to seconds
-    except:
-        return 0  # Default duration
-
-def save_audiobook_to_db(user_id: str, book_id: str, title: str, mp3_files: list):
-    """Save audiobook metadata to PostgreSQL"""
-    try:
-        conn = get_db_connection()
-        if not conn:
-            logger.warning("Database not available")
-            return
-        
-        with conn.cursor() as cur:
-            # Insert audiobook record
-            cur.execute("""
-                INSERT INTO audiobooks (id, user_id, title, chapters, created_at)
-                VALUES (%s, %s, %s, %s, %s)
-                ON DUPLICATE KEY UPDATE
-                    title = VALUES(title),
-                    chapters = VALUES(chapters)
-            """, (book_id, user_id, title, len(mp3_files), datetime.now()))
-            
-            # Insert chapter records
-            for mp3_file in mp3_files:
-                cur.execute("""
-                    INSERT INTO chapters (audiobook_id, chapter_number, title, url, duration)
-                    VALUES (%s, %s, %s, %s, %s)
-                    ON DUPLICATE KEY UPDATE
-                        title = VALUES(title),
-                        url = VALUES(url),
-                        duration = VALUES(duration)
-                """, (book_id, mp3_file['chapter'], mp3_file['title'], 
-                     mp3_file['url'], mp3_file['duration']))
-        
-        conn.close()
-        
-    except Exception as e:
-        logger.error(f"Database save failed: {e}")
-
-@app.route('/api/audiobooks/<user_id>')
-def get_audiobooks(user_id):
-    """Get user's audiobook library for Android Auto"""
-    try:
-        conn = get_db_connection()
-        if not conn:
-            return jsonify({'audiobooks': [], 'total': 0})
-        
-        with conn.cursor() as cur:
-            cur.execute("""
-                SELECT id, title, chapters, created_at 
-                FROM audiobooks 
-                WHERE user_id = %s 
-                ORDER BY created_at DESC
-            """, (user_id,))
-            
-            audiobooks = []
-            for row in cur.fetchall():
-                audiobooks.append({
-                    'id': row[0],
-                    'title': row[1],
-                    'chapters': row[2],
-                    'created_at': row[3].isoformat(),
-                    'stream_url': f'/api/stream/{row[0]}'
-                })
-        
-        conn.close()
-        return jsonify({'audiobooks': audiobooks, 'total': len(audiobooks)})
-        
-    except Exception as e:
-        logger.error(f"Get audiobooks failed: {e}")
-        return jsonify({'audiobooks': [], 'total': 0})
-
-@app.route('/api/stream/<book_id>')
-def stream_audiobook(book_id):
-    """Get streaming URLs for audiobook chapters"""
-    try:
-        chapter = request.args.get('chapter', '1')
-        
-        conn = get_db_connection()
-        if not conn:
-            return jsonify({'error': 'Database unavailable'}), 500
-        
-        with conn.cursor() as cur:
-            cur.execute("""
-                SELECT title, url, duration 
-                FROM chapters 
-                WHERE audiobook_id = %s AND chapter_number = %s
-            """, (book_id, int(chapter)))
-            
-            row = cur.fetchone()
-            if row:
-                return jsonify({
-                    'title': row[0],
-                    'stream_url': row[1],
-                    'duration': row[2],
-                    'chapter': chapter
-                })
-            else:
-                return jsonify({'error': 'Chapter not found'}), 404
-        
-    except Exception as e:
-        logger.error(f"Stream request failed: {e}")
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
