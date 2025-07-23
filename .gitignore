@@ -1,0 +1,19 @@
+# Environment variables
+TELEGRAM_BOT_TOKEN=
+
+# Temp files and directories
+temp/
+*.tmp
+*.log
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+
+# OS
+.DS_Store
+Thumbs.db
