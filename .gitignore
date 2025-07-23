@@ -1,11 +1,12 @@
-# Security & Credentials
-TELEGRAM_BOT_TOKEN=
-set_token.sh
+# Security & Credentials - NEVER COMMIT THESE!
+.env
+TELEGRAM_BOT_TOKEN=*
 *.key
 *.pem
-.env*
 config.ini
 config.json
+bot.log
+*.log
 
 # Audio & Media Files
 *.mp3
@@ -20,7 +21,6 @@ uploads/
 # Temp files and directories
 temp/
 *.tmp
-*.log
 *.pid
 
 # Python

@@ -1,63 +1,83 @@
-# EPUB to Audiobook Telegram Bot
+# EPUB to Audiobook Service
 
-A simple hobby project that converts EPUB files to audiobook MP3s using free Microsoft Edge TTS.
+A cloud-based service that converts EPUB files to audiobooks using Microsoft Azure TTS, designed for Android Auto integration.
 
-## Features
+## 🚀 Quick Deploy to Heroku
 
-- 🤖 Telegram bot interface
-- 📚 EPUB file processing
-- 🎙️ Free text-to-speech (Microsoft Edge TTS)  
-- 🎧 Chapter-based MP3 generation
-- 📱 Easy file sharing via Telegram
-
-## Setup
-
-1. Create a Telegram bot:
-   - Message @BotFather on Telegram
-   - Create new bot with `/newbot`
-   - Save your bot token
-
-2. Install dependencies:
+1. **Prerequisites:**
    ```bash
-   pip install -r requirements.txt
+   # Install Heroku CLI
+   brew tap heroku/brew && brew install heroku
+   
+   # Login to Heroku
+   heroku login
    ```
 
-3. Set environment variable:
+2. **Deploy:**
    ```bash
-   export TELEGRAM_BOT_TOKEN="your_bot_token_here"
+   ./deploy.sh
    ```
 
-4. Run the bot:
+3. **Set your API keys:**
    ```bash
-   python bot.py
+   # Azure Speech Services (get from Azure Portal)
+   heroku config:set AZURE_SPEECH_KEY=your_key_here --app epub-audiobook-service
+   heroku config:set AZURE_SPEECH_REGION=eastus --app epub-audiobook-service
+   
+   # Your Telegram Bot Token
+   heroku config:set TELEGRAM_BOT_TOKEN=your_token_here --app epub-audiobook-service
    ```
 
-## Usage
+## 📱 Android Auto Integration
 
-1. Send `/start` to your bot
-2. Upload an EPUB file  
-3. Wait for processing
-4. Receive MP3 audiobook files!
+The service provides REST API endpoints for Android Auto apps:
 
-## Tech Stack
+- `GET /api/audiobooks/{user_id}` - Get user's audiobook library
+- `GET /api/stream/{book_id}?chapter=1` - Stream audiobook chapters
+- `POST /api/process-epub` - Convert new EPUB to audiobook
 
-- **Bot Framework**: python-telegram-bot
-- **EPUB Processing**: ebooklib
-- **Text-to-Speech**: edge-tts (free Microsoft TTS)
-- **Audio Processing**: pydub
-- **Language**: Python 3.8+
+## 🎵 TTS Features
 
-## Limitations (Demo Version)
+- **Primary:** Microsoft Azure Neural Voices (high quality)
+- **Fallback:** Edge TTS (free backup)
+- **Voices:** en-US-AriaNeural, en-US-JennyNeural, en-US-GuyNeural
+- **Cost Estimation:** 500K characters free/month, then $4/1M chars
 
-- Processes first 3 chapters only
-- 5000 character limit per chapter
-- Basic HTML tag removal
-- English voice only (easily expandable)
+## 💾 Architecture
 
-## Future Enhancements
+```
+Telegram Bot → Heroku API → Azure TTS → S3 Storage → Android Auto
+```
 
-- Voice selection menu
-- Full book processing
-- Podcast RSS feed generation
-- Chapter progress tracking
-- Multiple language support
+- **Database:** PostgreSQL (audiobooks, chapters, users)
+- **Storage:** AWS S3 via Bucketeer addon
+- **Processing:** Async EPUB → MP3 conversion
+- **Authentication:** QR code linking for Android Auto
+
+## 🔧 Local Development
+
+```bash
+# Create virtual environment
+python3 -m venv venv
+source venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Copy environment template
+cp .env.example .env
+# Edit .env with your API keys
+
+# Run locally
+python main.py
+```
+
+## 📊 Monitoring
+
+```bash
+# View logs
+heroku logs --tail --app epub-audiobook-service
+
+# Check health
+curl https://epub-audiobook-service.herokuapp.com/health
+```

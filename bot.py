@@ -155,7 +155,7 @@ class EpubAudiobookBot:
         # For demo, we'll create a web URL that works without app
         
         # Create web URL that redirects or shows instructions
-        web_url = f"https://t.me/epubreaderbot?start=car_auth_{link_token}_{user_id}"
+        web_url = f"https://t.me/{context.bot.username}?start=car_auth_{link_token}_{user_id}"
         
         # Generate QR code
         import qrcode
