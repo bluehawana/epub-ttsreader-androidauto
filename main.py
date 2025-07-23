@@ -62,6 +62,22 @@ def get_s3_client():
         return s3, bucket_name
     return None, None
 
+@app.route('/')
+def home():
+    return jsonify({
+        'service': 'EPUB to Audiobook Service',
+        'status': 'running',
+        'description': 'Convert EPUB files to audiobooks using Azure TTS',
+        'endpoints': {
+            'health': '/health',
+            'process_epub': '/api/process-epub (POST)',
+            'get_audiobooks': '/api/audiobooks/{user_id}',
+            'stream_chapter': '/api/stream/{book_id}?chapter=1'
+        },
+        'version': '1.0.0',
+        'documentation': 'https://github.com/your-repo/epub-audiobook-bot'
+    })
+
 @app.route('/health')
 def health():
     return jsonify({
