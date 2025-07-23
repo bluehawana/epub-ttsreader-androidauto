@@ -6,7 +6,7 @@ echo "Starting EPUB Audiobook Bot with Podcast Server..."
 # Check if bot token is set
 if [ -z "$TELEGRAM_BOT_TOKEN" ]; then
     echo "Error: TELEGRAM_BOT_TOKEN environment variable not set"
-    echo "Please run: export TELEGRAM_BOT_TOKEN='***REMOVED***'"
+    echo "Please run: export TELEGRAM_BOT_TOKEN='8043237984:AAGOCQYtGyxTr9Jrwk6u9bN2bkoWts-qAFQ'"
     exit 1
 fi
 

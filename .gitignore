@@ -1,19 +1,52 @@
-# Environment variables
+# Security & Credentials
 TELEGRAM_BOT_TOKEN=
+set_token.sh
+*.key
+*.pem
+.env*
+config.ini
+config.json
+
+# Audio & Media Files
+*.mp3
+*.wav
+*.m4a
+*.opus
+*.epub
+podcasts/*/audio/
+downloads/
+uploads/
 
 # Temp files and directories
 temp/
 *.tmp
 *.log
+*.pid
 
 # Python
 __pycache__/
 *.pyc
 *.pyo
+*.pyd
+*.egg
 *.egg-info/
+*.whl
 .venv/
 venv/
+dist/
+build/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE & Development
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
 
 # OS
 .DS_Store
 Thumbs.db
+*.lnk
