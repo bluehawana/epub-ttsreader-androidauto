@@ -16,6 +16,12 @@ interface AudiobookApiService {
     
     @GET("/health")
     suspend fun getHealthStatus(): Response<Map<String, Any>>
+    
+    @GET("/api/job-status/{jobId}")
+    suspend fun getJobStatus(@Path("jobId") jobId: String): Response<JobStatus>
+    
+    @GET("/api/processing-status")
+    suspend fun getProcessingStatus(): Response<ProcessingStatus>
 }
 
 object ApiConfig {

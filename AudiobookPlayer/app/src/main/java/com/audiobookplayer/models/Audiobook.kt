@@ -38,3 +38,39 @@ data class AudiobookDetails(
     val chapters: List<Chapter>,
     val totalChapters: Int
 )
+
+data class JobStatus(
+    val job_id: String,
+    val status: String, // "processing", "completed", "failed", "not_found"
+    val progress: Int,
+    val message: String,
+    val book_title: String? = null,
+    val user_id: String? = null,
+    val started_at: String? = null,
+    val completed_at: String? = null,
+    val failed_at: String? = null,
+    val total_chapters: Int? = null,
+    val current_chapter: Int? = null,
+    val chapters_processed: Int? = null,
+    val error: String? = null
+)
+
+data class ProcessingJob(
+    val job_id: String,
+    val user_id: String,
+    val book_title: String,
+    val status: String,
+    val progress: Int,
+    val message: String,
+    val started_at: String,
+    val total_chapters: Int? = null,
+    val current_chapter: Int? = null
+)
+
+data class ProcessingStatus(
+    val active_jobs: List<ProcessingJob>,
+    val total_active: Int,
+    val total_completed: Int,
+    val processed_epubs: Int,
+    val timestamp: String
+)

@@ -20,6 +20,10 @@ import androidx.recyclerview.widget.RecyclerView
 import android.widget.TextView
 import android.widget.LinearLayout
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import androidx.cardview.widget.CardView
+import com.google.android.material.progressindicator.LinearProgressIndicator
+import android.util.Log
 
 class MainActivity : AppCompatActivity() {
     
@@ -29,6 +33,12 @@ class MainActivity : AppCompatActivity() {
     private lateinit var rvAudiobooks: RecyclerView
     private lateinit var emptyState: LinearLayout
     private lateinit var progressLoading: CircularProgressIndicator
+    
+    // Processing status views
+    private lateinit var processingStatusCard: CardView
+    private lateinit var tvProcessingTitle: TextView
+    private lateinit var tvProcessingDetails: TextView
+    private lateinit var progressProcessing: LinearProgressIndicator
     
     private lateinit var audiobookAdapter: AudiobookAdapter
     private lateinit var fileManager: FileManager
@@ -55,6 +65,12 @@ class MainActivity : AppCompatActivity() {
         rvAudiobooks = findViewById(R.id.rvAudiobooks)
         emptyState = findViewById(R.id.emptyState)
         progressLoading = findViewById(R.id.progressLoading)
+        
+        // Processing status views
+        processingStatusCard = findViewById(R.id.processingStatusCard)
+        tvProcessingTitle = findViewById(R.id.tvProcessingTitle)
+        tvProcessingDetails = findViewById(R.id.tvProcessingDetails)
+        progressProcessing = findViewById(R.id.progressProcessing)
     }
     
     private fun initServices() {
@@ -112,6 +128,10 @@ class MainActivity : AppCompatActivity() {
     private fun syncAudiobooks(userId: String) {
         lifecycleScope.launch {
             try {
+                // Start monitoring processing status
+                startProcessingStatusMonitoring()
+                
+                // Sync audiobooks
                 showLoading(true)
                 tvSyncStatus.text = "Syncing audiobooks..."
                 
@@ -211,5 +231,67 @@ class MainActivity : AppCompatActivity() {
     private fun updateEmptyState() {
         emptyState.visibility = if (audiobooks.isEmpty()) View.VISIBLE else View.GONE
         rvAudiobooks.visibility = if (audiobooks.isEmpty()) View.GONE else View.VISIBLE
+    }
+    
+    private fun startProcessingStatusMonitoring() {
+        lifecycleScope.launch {
+            try {
+                // Check processing status every 5 seconds
+                while (true) {
+                    val response = ApiConfig.apiService.getProcessingStatus()
+                    
+                    if (response.isSuccessful && response.body() != null) {
+                        val status = response.body()!!
+                        updateProcessingStatus(status)
+                        
+                        // If no active jobs, hide the processing card after a delay
+                        if (status.total_active == 0) {
+                            delay(2000) // Show for 2 more seconds
+                            hideProcessingStatus()
+                            break
+                        }
+                    }
+                    
+                    delay(5000) // Check every 5 seconds
+                }
+            } catch (e: Exception) {
+                Log.e("MainActivity", "Processing status monitoring error: ${e.message}")
+                hideProcessingStatus()
+            }
+        }
+    }
+    
+    private fun updateProcessingStatus(status: ProcessingStatus) {
+        if (status.total_active > 0) {
+            processingStatusCard.visibility = View.VISIBLE
+            
+            val activeJob = status.active_jobs.firstOrNull()
+            if (activeJob != null) {
+                tvProcessingTitle.text = "Converting: ${activeJob.book_title}"
+                progressProcessing.progress = activeJob.progress
+                
+                val details = when {
+                    activeJob.total_chapters != null && activeJob.current_chapter != null -> 
+                        "${activeJob.message} (Chapter ${activeJob.current_chapter}/${activeJob.total_chapters})"
+                    else -> activeJob.message
+                }
+                tvProcessingDetails.text = details
+            } else {
+                tvProcessingTitle.text = "Processing EPUBs to Audiobooks..."
+                tvProcessingDetails.text = "${status.total_active} job(s) active"
+                progressProcessing.progress = 0
+            }
+        } else {
+            // Show completion message briefly
+            if (status.total_completed > 0) {
+                tvProcessingTitle.text = "Processing Complete!"
+                tvProcessingDetails.text = "${status.total_completed} audiobook(s) ready"
+                progressProcessing.progress = 100
+            }
+        }
+    }
+    
+    private fun hideProcessingStatus() {
+        processingStatusCard.visibility = View.GONE
     }
 }
