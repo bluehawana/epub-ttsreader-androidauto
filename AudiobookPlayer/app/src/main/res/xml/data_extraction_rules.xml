@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<data-extraction-rules>
+    <cloud-backup>
+        <!-- Include/exclude rules for cloud backup -->
+        <exclude domain="sharedpref" path="device_prefs.xml"/>
+    </cloud-backup>
+    <device-transfer>
+        <!-- Include/exclude rules for device transfer -->
+        <exclude domain="sharedpref" path="device_prefs.xml"/>
+    </device-transfer>
+</data-extraction-rules>

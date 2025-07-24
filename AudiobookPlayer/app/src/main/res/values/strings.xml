@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Audiobook Player</string>
+    
+    <!-- Main Activity -->
+    <string name="enter_user_id">Enter your Telegram User ID</string>
+    <string name="sync">Sync</string>
+    <string name="no_audiobooks">No audiobooks yet</string>
+    <string name="send_epub_instruction">Send EPUB files to your Telegram bot\nto create audiobooks</string>
+    
+    <!-- Audiobook Item -->
+    <string name="chapters_format">%d chapters</string>
+    <string name="downloaded">Downloaded</string>
+    <string name="online">Online</string>
+    <string name="play">Play</string>
+    <string name="download">Download</string>
+    <string name="re_download">Re-download</string>
+    
+    <!-- Player Activity -->
+    <string name="now_playing">Now Playing</string>
+    <string name="chapter_format">Chapter %1$d of %2$d</string>
+    <string name="speed_format">%.1fx</string>
+    
+    <!-- Menu Items -->
+    <string name="menu_play">Play</string>
+    <string name="menu_download">Download</string>
+    <string name="menu_delete_local">Delete Local Files</string>
+    <string name="menu_details">Details</string>
+    
+    <!-- Messages -->
+    <string name="downloading">Downloading %s...</string>
+    <string name="downloaded_success">Downloaded %s</string>
+    <string name="download_failed">Download failed</string>
+    <string name="deleted_success">Deleted %s</string>
+    <string name="delete_failed">Failed to delete audiobook</string>
+    <string name="sync_failed">Failed to sync audiobooks</string>
+    <string name="enter_user_id_toast">Please enter your User ID</string>
+    
+    <!-- Time Format -->
+    <string name="time_format" formatted="false">%02d:%02d</string>
+    
+    <!-- Content Descriptions -->
+    <string name="menu">Menu</string>
+    <string name="play_pause">Play/Pause</string>
+    <string name="previous_chapter">Previous Chapter</string>
+    <string name="next_chapter">Next Chapter</string>
+    <string name="rewind_30">Rewind 30 seconds</string>
+    <string name="forward_30">Forward 30 seconds</string>
+    <string name="volume">Volume</string>
+    <string name="sleep_timer">Sleep Timer</string>
+    <string name="bookmark">Bookmark</string>
+    <string name="back">Back</string>
+</resources>

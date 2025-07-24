@@ -10,3 +10,4 @@ gunicorn>=21.0.0
 azure-cognitiveservices-speech>=1.34.0
 boto3>=1.34.0
 python-dotenv>=1.0.0
+TTS>=0.21.0
