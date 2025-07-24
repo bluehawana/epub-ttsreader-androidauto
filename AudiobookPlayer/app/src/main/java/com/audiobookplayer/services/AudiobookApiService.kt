@@ -30,6 +30,9 @@ interface AudiobookApiService {
     @GET("/api/verify-auth-token/{token}")
     suspend fun verifyAuthToken(@Path("token") token: String): Response<AuthTokenVerification>
     
+    @POST("/api/process-all-epubs")
+    suspend fun processAllEpubs(): Response<Map<String, Any>>
+    
     @GET("/api/generate-auth-qr/{userId}")
     suspend fun generateAuthQR(@Path("userId") userId: String): Response<QRCodeData>
 }

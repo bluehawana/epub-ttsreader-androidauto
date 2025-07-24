@@ -62,11 +62,22 @@
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnSync"
-                    android:layout_width="wrap_content"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="8dp"
+                    android:layout_marginStart="4dp"
+                    android:layout_weight="1"
                     android:backgroundTint="@color/primary"
                     android:text="Sync"
+                    android:textColor="@color/white" />
+                
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnProcessEpubs"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="4dp"
+                    android:layout_weight="1"
+                    android:backgroundTint="@color/success"
+                    android:text="Process EPUBs"
                     android:textColor="@color/white" />
 
             </LinearLayout>

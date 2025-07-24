@@ -18,7 +18,7 @@ import qrcode
 from io import BytesIO
 
 # Import our services
-from azure_tts import AzureTTSService
+from edge_tts_service import EdgeTTSService
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -29,7 +29,7 @@ app = Flask(__name__)
 CORS(app)
 
 # Initialize services
-tts_service = AzureTTSService()
+tts_service = EdgeTTSService()
 
 # Cloudflare R2 storage
 def get_r2_client():
@@ -54,13 +54,18 @@ def home():
     return jsonify({
         'service': 'EPUB to Audiobook Service',
         'status': 'running',
-        'description': 'Convert EPUB files to audiobooks using Azure TTS',
+        'description': 'Convert EPUB files to audiobooks using EdgeTTS',
         'storage': 'Cloudflare R2',
         'endpoints': {
             'health': '/health',
             'process_epub': '/api/process-epub (POST)',
+            'process_all_epubs': '/api/process-all-epubs (POST)',
             'list_audiobooks': '/api/audiobooks/{user_id}',
-            'download_audiobook': '/api/download/{audiobook_id}'
+            'download_audiobook': '/api/download/{audiobook_id}',
+            'job_status': '/api/job-status/{job_id}',
+            'processing_status': '/api/processing-status',
+            'generate_auth_qr': '/api/generate-auth-qr/{user_id}',
+            'verify_auth_token': '/api/verify-auth-token/{token}'
         },
         'version': '2.0.0 - Simplified R2 Storage'
     })
@@ -73,7 +78,7 @@ def health():
     return jsonify({
         'status': 'healthy',
         'service': 'epub-audiobook-cloud',
-        'tts': 'azure' if not tts_service.use_edge_tts else 'edge',
+        'tts': 'edge',
         'storage': f'cloudflare_r2_{storage_status}',
         'r2_scanner': 'active',
         'processed_epubs': len(processed_epubs),

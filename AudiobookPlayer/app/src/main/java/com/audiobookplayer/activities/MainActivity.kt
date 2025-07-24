@@ -30,7 +30,7 @@ class MainActivity : AppCompatActivity() {
     
     private lateinit var etUserId: TextInputEditText
     private lateinit var btnSync: MaterialButton
-    private lateinit var btnShowQR: MaterialButton
+    private lateinit var btnProcessEpubs: MaterialButton
     private lateinit var tvSyncStatus: TextView
     private lateinit var rvAudiobooks: RecyclerView
     private lateinit var emptyState: LinearLayout
@@ -68,7 +68,7 @@ class MainActivity : AppCompatActivity() {
     private fun initViews() {
         etUserId = findViewById(R.id.etUserId)
         btnSync = findViewById(R.id.btnSync)
-        btnShowQR = findViewById(R.id.btnShowQR)
+        btnProcessEpubs = findViewById(R.id.btnProcessEpubs)
         tvSyncStatus = findViewById(R.id.tvSyncStatus)
         rvAudiobooks = findViewById(R.id.rvAudiobooks)
         emptyState = findViewById(R.id.emptyState)
@@ -118,17 +118,8 @@ class MainActivity : AppCompatActivity() {
             }
         }
         
-        btnShowQR.setOnClickListener {
-            val userId = etUserId.text.toString().trim()
-            if (userId.isNotEmpty()) {
-                // Direct sync without QR code
-                currentUserId = userId
-                saveUserId(userId)
-                syncAudiobooks(userId)
-                Toast.makeText(this, "Syncing audiobooks automatically...", Toast.LENGTH_SHORT).show()
-            } else {
-                Toast.makeText(this, "Please enter your User ID first", Toast.LENGTH_SHORT).show()
-            }
+        btnProcessEpubs.setOnClickListener {
+            processAllEpubs()
         }
     }
 
@@ -314,6 +305,39 @@ class MainActivity : AppCompatActivity() {
     
     private fun hideProcessingStatus() {
         processingStatusCard.visibility = View.GONE
+    }
+    
+    private fun processAllEpubs() {
+        lifecycleScope.launch {
+            try {
+                showLoading(true)
+                tvSyncStatus.text = "Processing EPUBs from R2 storage..."
+                
+                val response = ApiConfig.apiService.processAllEpubs()
+                
+                if (response.isSuccessful && response.body() != null) {
+                    val result = response.body()!!
+                    val message = result["message"] as? String ?: "Processing started"
+                    val epubFiles = result["epub_files"] as? List<*> ?: emptyList<Any>()
+                    
+                    tvSyncStatus.text = "$message (${epubFiles.size} files found)"
+                    Toast.makeText(this@MainActivity, "EPUB processing started!", Toast.LENGTH_SHORT).show()
+                    
+                    // Start monitoring processing status
+                    startProcessingStatusMonitoring()
+                    
+                } else {
+                    tvSyncStatus.text = "Failed to process EPUBs: ${response.message()}"
+                    Toast.makeText(this@MainActivity, "Failed to process EPUBs", Toast.LENGTH_SHORT).show()
+                }
+                
+            } catch (e: Exception) {
+                tvSyncStatus.text = "Error processing EPUBs: ${e.message}"
+                Toast.makeText(this@MainActivity, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+            } finally {
+                showLoading(false)
+            }
+        }
     }
     
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
