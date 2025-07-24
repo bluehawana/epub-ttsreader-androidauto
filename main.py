@@ -77,6 +77,68 @@ def health():
         'timestamp': datetime.now().isoformat()
     })
 
+@app.route('/api/list-bucket')
+def list_bucket():
+    """List all files in R2 bucket for debugging"""
+    try:
+        r2, bucket_name = get_r2_client()
+        if not r2 or not bucket_name:
+            return jsonify({'error': 'R2 not configured'}), 500
+        
+        response = r2.list_objects_v2(Bucket=bucket_name, Prefix="")
+        files = []
+        
+        for obj in response.get('Contents', []):
+            files.append({
+                'key': obj['Key'],
+                'size': obj['Size'],
+                'modified': obj['LastModified'].isoformat()
+            })
+        
+        return jsonify({
+            'bucket': bucket_name,
+            'total_files': len(files),
+            'files': files[:50]  # Limit to first 50 files
+        })
+        
+    except Exception as e:
+        logger.error(f"List bucket error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/process-all-epubs', methods=['POST'])
+def process_all_epubs():
+    """Manually trigger processing of all EPUBs in bucket"""
+    try:
+        r2, bucket_name = get_r2_client()
+        if not r2 or not bucket_name:
+            return jsonify({'error': 'R2 not configured'}), 500
+        
+        # Find all EPUB files
+        response = r2.list_objects_v2(Bucket=bucket_name, Prefix="")
+        epub_files = []
+        
+        for obj in response.get('Contents', []):
+            key = obj['Key']
+            if '/epubs/' in key and key.endswith('.epub'):
+                epub_files.append(key)
+        
+        # Process each EPUB
+        for epub_key in epub_files:
+            if epub_key not in processed_epubs:
+                logger.info(f"🔄 Manually processing EPUB: {epub_key}")
+                process_epub_from_r2(epub_key)
+                processed_epubs.add(epub_key)
+        
+        return jsonify({
+            'message': f'Processing {len(epub_files)} EPUB files',
+            'epub_files': epub_files,
+            'already_processed': len([f for f in epub_files if f in processed_epubs])
+        })
+        
+    except Exception as e:
+        logger.error(f"Manual processing error: {e}")
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/process-epub', methods=['POST'])
 def process_epub():
     """Process EPUB from Telegram bot and store in R2"""
