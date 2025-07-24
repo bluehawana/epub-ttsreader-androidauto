@@ -90,7 +90,10 @@ def process_epub():
         job_id = str(uuid.uuid4())
         
         # Start async processing
-        asyncio.create_task(process_epub_async(job_id, user_id, book_title, epub_data))
+        threading.Thread(
+            target=lambda: asyncio.run(process_epub_async(job_id, user_id, book_title, epub_data)),
+            daemon=True
+        ).start()
         
         return jsonify({
             'job_id': job_id,
@@ -377,7 +380,10 @@ def process_epub_from_r2(r2_key: str):
                 job_id = str(uuid.uuid4())
                 
                 # Start async processing
-                asyncio.create_task(process_epub_async(job_id, user_id, book_title, epub_data))
+                threading.Thread(
+                    target=lambda: asyncio.run(process_epub_async(job_id, user_id, book_title, epub_data)),
+                    daemon=True
+                ).start()
                 logger.info(f"🎧 Started TTS conversion job {job_id}")
         
     except Exception as e:
