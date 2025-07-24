@@ -13,6 +13,9 @@ import json
 import threading
 import time
 import base64
+import secrets
+import qrcode
+from io import BytesIO
 
 # Import our services
 from azure_tts import AzureTTSService
@@ -76,6 +79,75 @@ def health():
         'processed_epubs': len(processed_epubs),
         'timestamp': datetime.now().isoformat()
     })
+
+@app.route('/api/job-status/<job_id>')
+def get_job_status(job_id):
+    """Get processing status for a specific job"""
+    try:
+        if job_id in processing_jobs:
+            return jsonify(processing_jobs[job_id])
+        
+        # Check if job is completed by looking for metadata in R2
+        r2, bucket_name = get_r2_client()
+        if not r2 or not bucket_name:
+            return jsonify({'error': 'Storage not available'}), 500
+        
+        # Search for metadata across all user folders
+        response = r2.list_objects_v2(Bucket=bucket_name, Prefix="")
+        
+        for obj in response.get('Contents', []):
+            if f'/{job_id}/metadata.json' in obj['Key']:
+                try:
+                    metadata_obj = r2.get_object(Bucket=bucket_name, Key=obj['Key'])
+                    metadata = json.loads(metadata_obj['Body'].read())
+                    
+                    return jsonify({
+                        'job_id': job_id,
+                        'status': 'completed',
+                        'progress': 100,
+                        'book_title': metadata.get('book_title', 'Unknown'),
+                        'chapters': len(metadata.get('chapters', [])),
+                        'completed_at': metadata.get('created_at'),
+                        'message': f'Audiobook ready with {len(metadata.get("chapters", []))} chapters'
+                    })
+                except Exception as e:
+                    logger.error(f"Error reading metadata for job {job_id}: {e}")
+        
+        # Job not found
+        return jsonify({
+            'job_id': job_id,
+            'status': 'not_found',
+            'message': 'Job not found or expired'
+        }), 404
+        
+    except Exception as e:
+        logger.error(f"Job status check failed: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/processing-status')
+def get_processing_status():
+    """Get status of all currently processing jobs"""
+    try:
+        active_jobs = []
+        completed_count = 0
+        
+        for job_id, job_info in processing_jobs.items():
+            if job_info['status'] == 'processing':
+                active_jobs.append(job_info)
+            elif job_info['status'] == 'completed':
+                completed_count += 1
+        
+        return jsonify({
+            'active_jobs': active_jobs,
+            'total_active': len(active_jobs),
+            'total_completed': completed_count,
+            'processed_epubs': len(processed_epubs),
+            'timestamp': datetime.now().isoformat()
+        })
+        
+    except Exception as e:
+        logger.error(f"Processing status check failed: {e}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/list-bucket')
 def list_bucket():
@@ -151,6 +223,17 @@ def process_epub():
         # Create processing job
         job_id = str(uuid.uuid4())
         
+        # Track job status
+        processing_jobs[job_id] = {
+            'job_id': job_id,
+            'user_id': user_id,
+            'book_title': book_title,
+            'status': 'processing',
+            'progress': 0,
+            'started_at': datetime.now().isoformat(),
+            'message': 'Starting EPUB processing...'
+        }
+        
         # Start async processing
         threading.Thread(
             target=lambda: asyncio.run(process_epub_async(job_id, user_id, book_title, epub_data)),
@@ -162,7 +245,8 @@ def process_epub():
             'status': 'processing',
             'message': f'Converting "{book_title}" to audiobook...',
             'storage': 'cloudflare_r2',
-            'estimated_time': '5-10 minutes'
+            'estimated_time': '5-10 minutes',
+            'status_url': f'/api/job-status/{job_id}'
         })
         
     except Exception as e:
@@ -174,9 +258,25 @@ async def process_epub_async(job_id: str, user_id: str, book_title: str, epub_da
     try:
         logger.info(f"Starting EPUB processing for job {job_id}")
         
+        # Update job status
+        if job_id in processing_jobs:
+            processing_jobs[job_id].update({
+                'status': 'processing',
+                'progress': 5,
+                'message': 'Extracting chapters from EPUB...'
+            })
+        
         # 1. Extract chapters from EPUB
         chapters = extract_chapters_from_epub(epub_data)
         logger.info(f"Extracted {len(chapters)} chapters")
+        
+        # Update job status
+        if job_id in processing_jobs:
+            processing_jobs[job_id].update({
+                'progress': 10,
+                'message': f'Found {len(chapters)} chapters, starting TTS conversion...',
+                'total_chapters': len(chapters)
+            })
         
         audiobook_metadata = {
             'job_id': job_id,
@@ -190,6 +290,15 @@ async def process_epub_async(job_id: str, user_id: str, book_title: str, epub_da
         # 2. Convert each chapter to MP3 and upload to R2
         for i, chapter in enumerate(chapters):
             logger.info(f"Converting chapter {i+1}/{len(chapters)}")
+            
+            # Update progress
+            progress = 10 + (i * 80 // len(chapters))  # 10-90% for TTS processing
+            if job_id in processing_jobs:
+                processing_jobs[job_id].update({
+                    'progress': progress,
+                    'message': f'Converting chapter {i+1}/{len(chapters)} to speech...',
+                    'current_chapter': i + 1
+                })
             
             # Create temp file for MP3
             with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as tmp_file:
@@ -220,13 +329,39 @@ async def process_epub_async(job_id: str, user_id: str, book_title: str, epub_da
                 os.unlink(mp3_path)
         
         # 3. Save audiobook metadata to R2 as JSON
+        if job_id in processing_jobs:
+            processing_jobs[job_id].update({
+                'progress': 95,
+                'message': 'Saving audiobook metadata...'
+            })
+        
         metadata_key = f"{user_id}/{job_id}/metadata.json"
         save_metadata_to_r2(audiobook_metadata, metadata_key)
+        
+        # Mark job as completed
+        if job_id in processing_jobs:
+            processing_jobs[job_id].update({
+                'status': 'completed',
+                'progress': 100,
+                'message': f'Audiobook ready! {len(audiobook_metadata["chapters"])} chapters processed.',
+                'completed_at': datetime.now().isoformat(),
+                'chapters_processed': len(audiobook_metadata['chapters'])
+            })
         
         logger.info(f"Successfully processed EPUB job {job_id} - {len(audiobook_metadata['chapters'])} chapters stored in R2")
         
     except Exception as e:
         logger.error(f"Async processing failed for job {job_id}: {e}")
+        
+        # Mark job as failed
+        if job_id in processing_jobs:
+            processing_jobs[job_id].update({
+                'status': 'failed',
+                'progress': 0,
+                'message': f'Processing failed: {str(e)}',
+                'failed_at': datetime.now().isoformat(),
+                'error': str(e)
+            })
 
 def extract_chapters_from_epub(epub_data: str) -> list:
     """Extract chapters from base64 EPUB data"""
@@ -384,8 +519,145 @@ def download_audiobook(audiobook_id):
         logger.error(f"Download request failed: {e}")
         return jsonify({'error': str(e)}), 500
 
+# QR Code Authentication System
+auth_tokens = {}  # Store temporary auth tokens: {token: {user_id, created_at, expires_at}}
+
+@app.route('/api/generate-auth-qr/<user_id>')
+def generate_auth_qr(user_id):
+    """Generate QR code for authentication"""
+    try:
+        # Generate secure random token
+        token = secrets.token_urlsafe(32)
+        
+        # Store token with expiration (5 minutes)
+        from datetime import datetime, timedelta
+        created_at = datetime.now()
+        expires_at = created_at + timedelta(minutes=5)
+        
+        auth_tokens[token] = {
+            'user_id': user_id,
+            'created_at': created_at.isoformat(),
+            'expires_at': expires_at.isoformat()
+        }
+        
+        # Create QR code content (URL that app will scan)
+        base_url = request.host_url.rstrip('/')
+        qr_content = f"{base_url}/auth?token={token}&user_id={user_id}"
+        
+        # Generate QR code image
+        qr = qrcode.QRCode(
+            version=1,
+            error_correction=qrcode.constants.ERROR_CORRECT_L,
+            box_size=10,
+            border=4,
+        )
+        qr.add_data(qr_content)
+        qr.make(fit=True)
+        
+        # Create QR code image
+        qr_image = qr.make_image(fill_color="black", back_color="white")
+        
+        # Convert to base64 for JSON response
+        buffer = BytesIO()
+        qr_image.save(buffer, format='PNG')
+        qr_base64 = base64.b64encode(buffer.getvalue()).decode()
+        
+        logger.info(f"Generated QR code for user {user_id}, token expires at {expires_at}")
+        
+        return jsonify({
+            'token': token,
+            'user_id': user_id,
+            'qr_code_base64': qr_base64,
+            'qr_content': qr_content,
+            'expires_at': expires_at.isoformat(),
+            'expires_in_minutes': 5
+        })
+        
+    except Exception as e:
+        logger.error(f"QR generation failed: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/verify-auth-token/<token>')
+def verify_auth_token(token):
+    """Verify authentication token and return user_id"""
+    try:
+        # Check if token exists
+        if token not in auth_tokens:
+            return jsonify({
+                'valid': False,
+                'error': 'Invalid token'
+            }), 400
+        
+        # Check if token is expired
+        token_data = auth_tokens[token]
+        from datetime import datetime
+        expires_at = datetime.fromisoformat(token_data['expires_at'])
+        
+        if datetime.now() > expires_at:
+            # Clean up expired token
+            del auth_tokens[token]
+            return jsonify({
+                'valid': False,
+                'error': 'Token expired'
+            }), 400
+        
+        # Token is valid
+        user_id = token_data['user_id']
+        
+        # Optionally, clean up used token (one-time use)
+        del auth_tokens[token]
+        
+        logger.info(f"Successfully authenticated user {user_id} with token")
+        
+        return jsonify({
+            'valid': True,
+            'user_id': user_id,
+            'authenticated_at': datetime.now().isoformat()
+        })
+        
+    except Exception as e:
+        logger.error(f"Token verification failed: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/auth')
+def auth_redirect():
+    """Handle QR code scan redirect (for web browsers)"""
+    token = request.args.get('token')
+    user_id = request.args.get('user_id')
+    
+    if token and user_id:
+        # This endpoint could show a web page confirming authentication
+        # For now, just return JSON
+        return jsonify({
+            'message': 'QR Code scanned successfully!',
+            'token': token,
+            'user_id': user_id,
+            'instructions': 'Your mobile app should now be authenticated.'
+        })
+    else:
+        return jsonify({'error': 'Invalid QR code'}), 400
+
+# Cleanup expired tokens periodically
+def cleanup_expired_tokens():
+    """Remove expired authentication tokens"""
+    from datetime import datetime
+    current_time = datetime.now()
+    
+    expired_tokens = []
+    for token, data in auth_tokens.items():
+        expires_at = datetime.fromisoformat(data['expires_at'])
+        if current_time > expires_at:
+            expired_tokens.append(token)
+    
+    for token in expired_tokens:
+        del auth_tokens[token]
+        
+    if expired_tokens:
+        logger.info(f"Cleaned up {len(expired_tokens)} expired auth tokens")
+
 # R2 EPUB Scanner - Background Process
 processed_epubs = set()  # Track processed files
+processing_jobs = {}  # Track active processing jobs
 
 def scan_r2_for_epubs():
     """Background thread to scan R2 for new EPUB files and process them"""

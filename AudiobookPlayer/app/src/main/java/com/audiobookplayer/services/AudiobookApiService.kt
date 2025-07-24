@@ -2,6 +2,10 @@ package com.audiobookplayer.services
 
 import com.audiobookplayer.models.AudiobookDetails
 import com.audiobookplayer.models.AudiobookResponse
+import com.audiobookplayer.models.AuthTokenVerification
+import com.audiobookplayer.models.JobStatus
+import com.audiobookplayer.models.ProcessingStatus
+import com.audiobookplayer.models.QRCodeData
 import retrofit2.Response
 import retrofit2.http.GET
 import retrofit2.http.Path
@@ -22,6 +26,12 @@ interface AudiobookApiService {
     
     @GET("/api/processing-status")
     suspend fun getProcessingStatus(): Response<ProcessingStatus>
+    
+    @GET("/api/verify-auth-token/{token}")
+    suspend fun verifyAuthToken(@Path("token") token: String): Response<AuthTokenVerification>
+    
+    @GET("/api/generate-auth-qr/{userId}")
+    suspend fun generateAuthQR(@Path("userId") userId: String): Response<QRCodeData>
 }
 
 object ApiConfig {

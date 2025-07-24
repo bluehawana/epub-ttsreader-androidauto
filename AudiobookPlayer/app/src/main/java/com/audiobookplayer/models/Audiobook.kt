@@ -74,3 +74,16 @@ data class ProcessingStatus(
     val processed_epubs: Int,
     val timestamp: String
 )
+
+data class AuthTokenVerification(
+    val valid: Boolean,
+    val user_id: String? = null,
+    val authenticated_at: String? = null,
+    val error: String? = null
+)
+
+data class QRCodeData(
+    val token: String,
+    val qr_url: String,
+    val expires_at: String
+)

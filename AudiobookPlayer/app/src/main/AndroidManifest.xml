@@ -6,6 +6,9 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     
+    <!-- Camera permission for QR code scanning -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    
     <!-- Storage permissions for downloading audiobooks -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
@@ -43,6 +46,18 @@
             android:name=".activities.PlayerActivity"
             android:exported="false"
             android:launchMode="singleTop"
+            android:theme="@style/Theme.AudiobookPlayer" />
+        
+        <!-- QR Code Display Activity -->
+        <activity
+            android:name=".activities.QRDisplayActivity"
+            android:exported="false"
+            android:theme="@style/Theme.AudiobookPlayer" />
+        
+        <!-- QR Code Scanner Activity -->
+        <activity
+            android:name=".activities.QRScannerActivity"
+            android:exported="false"
             android:theme="@style/Theme.AudiobookPlayer" />
         
         <!-- Background Sync Service -->

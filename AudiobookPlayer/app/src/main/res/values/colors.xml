@@ -22,6 +22,7 @@
     <color name="warning">#FF9800</color>
     
     <!-- Accent Colors -->
+    <color name="accent">#FF6B35</color>
     <color name="accent_light">#FFF3E0</color>
     
     <!-- Card Colors -->

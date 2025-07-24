@@ -11,6 +11,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import com.audiobookplayer.R
 import com.audiobookplayer.adapters.AudiobookAdapter
 import com.audiobookplayer.models.Audiobook
+import com.audiobookplayer.models.ProcessingStatus
 import com.audiobookplayer.services.ApiConfig
 import com.audiobookplayer.utils.FileManager
 import com.google.android.material.button.MaterialButton
@@ -29,6 +30,7 @@ class MainActivity : AppCompatActivity() {
     
     private lateinit var etUserId: TextInputEditText
     private lateinit var btnSync: MaterialButton
+    private lateinit var btnShowQR: MaterialButton
     private lateinit var tvSyncStatus: TextView
     private lateinit var rvAudiobooks: RecyclerView
     private lateinit var emptyState: LinearLayout
@@ -46,6 +48,11 @@ class MainActivity : AppCompatActivity() {
     
     private var currentUserId: String? = null
     private val audiobooks = mutableListOf<Audiobook>()
+    
+    // QR Scanner request code
+    companion object {
+        private const val QR_SCANNER_REQUEST_CODE = 1001
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -61,6 +68,7 @@ class MainActivity : AppCompatActivity() {
     private fun initViews() {
         etUserId = findViewById(R.id.etUserId)
         btnSync = findViewById(R.id.btnSync)
+        btnShowQR = findViewById(R.id.btnShowQR)
         tvSyncStatus = findViewById(R.id.tvSyncStatus)
         rvAudiobooks = findViewById(R.id.rvAudiobooks)
         emptyState = findViewById(R.id.emptyState)
@@ -107,6 +115,19 @@ class MainActivity : AppCompatActivity() {
                 syncAudiobooks(userId)
             } else {
                 Toast.makeText(this, "Please enter your User ID", Toast.LENGTH_SHORT).show()
+            }
+        }
+        
+        btnShowQR.setOnClickListener {
+            val userId = etUserId.text.toString().trim()
+            if (userId.isNotEmpty()) {
+                // Direct sync without QR code
+                currentUserId = userId
+                saveUserId(userId)
+                syncAudiobooks(userId)
+                Toast.makeText(this, "Syncing audiobooks automatically...", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "Please enter your User ID first", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -293,5 +314,23 @@ class MainActivity : AppCompatActivity() {
     
     private fun hideProcessingStatus() {
         processingStatusCard.visibility = View.GONE
+    }
+    
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        
+        if (requestCode == QR_SCANNER_REQUEST_CODE && resultCode == RESULT_OK) {
+            val authenticatedUserId = data?.getStringExtra("authenticated_user_id")
+            if (authenticatedUserId != null) {
+                // QR authentication successful
+                etUserId.setText(authenticatedUserId)
+                currentUserId = authenticatedUserId
+                saveUserId(authenticatedUserId)
+                
+                // Automatically sync audiobooks
+                Toast.makeText(this, "QR login successful! Syncing audiobooks...", Toast.LENGTH_SHORT).show()
+                syncAudiobooks(authenticatedUserId)
+            }
+        }
     }
 }
