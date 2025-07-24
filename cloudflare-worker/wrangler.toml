@@ -1,0 +1,23 @@
+name = "epub-audiobook-worker"
+main = "src/index.js"
+compatibility_date = "2024-07-01"
+
+# Environment variables for R2 bucket access
+[env.production.vars]
+R2_BUCKET_NAME = "ebuppool"
+
+# R2 bucket binding
+[[r2_buckets]]
+binding = "EPUB_BUCKET"
+bucket_name = "ebuppool"
+
+# KV namespace for job tracking (optional)
+[[kv_namespaces]]
+binding = "JOBS_KV"
+id = "your-kv-id-here"
+preview_id = "your-preview-kv-id-here"
+
+# Durable Objects for long-running TTS processing
+[[durable_objects.bindings]]
+name = "TTS_PROCESSOR"
+class_name = "TTSProcessor"

@@ -1,0 +1,19 @@
+{
+  "name": "epub-audiobook-worker",
+  "version": "1.0.0",
+  "description": "Cloudflare Worker for EPUB to Audiobook conversion",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.0.0",
+    "edge-tts": "^7.0.0",
+    "epub-parser": "^0.2.0"
+  },
+  "devDependencies": {
+    "wrangler": "^3.0.0"
+  }
+}
