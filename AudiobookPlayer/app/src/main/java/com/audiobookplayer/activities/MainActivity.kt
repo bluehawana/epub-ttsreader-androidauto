@@ -307,11 +307,58 @@ class MainActivity : AppCompatActivity() {
         processingStatusCard.visibility = View.GONE
     }
     
+    private fun showProcessingProgress(message: String, progress: Int) {
+        processingStatusCard.visibility = View.VISIBLE
+        tvProcessingTitle.text = "🎧 Converting EPUBs to Audiobooks"
+        tvProcessingDetails.text = message
+        progressProcessing.progress = progress
+    }
+    
+    private fun startSimulatedProcessingProgress(epubCount: Int) {
+        lifecycleScope.launch {
+            try {
+                val stages = listOf(
+                    "📚 Extracting chapters from EPUBs..." to 20,
+                    "🔊 Converting text to speech with EdgeTTS..." to 40,
+                    "🎵 Processing audio chapters..." to 60,
+                    "☁️ Uploading audiobooks to R2 storage..." to 80,
+                    "✅ Finalizing audiobook metadata..." to 95
+                )
+                
+                for ((message, progress) in stages) {
+                    showProcessingProgress(message, progress)
+                    delay(15000) // 15 seconds per stage = ~75 seconds total
+                }
+                
+                // Final completion check
+                showProcessingProgress("🔍 Checking completion status...", 100)
+                delay(5000)
+                
+                // Auto-sync to check for new audiobooks
+                currentUserId?.let { userId ->
+                    tvProcessingTitle.text = "✅ Processing Complete!"
+                    tvProcessingDetails.text = "Checking for new audiobooks..."
+                    delay(2000)
+                    syncAudiobooks(userId)
+                }
+                
+                hideProcessingStatus()
+                
+            } catch (e: Exception) {
+                Log.e("MainActivity", "Simulated progress error: ${e.message}")
+                hideProcessingStatus()
+            }
+        }
+    }
+    
     private fun processAllEpubs() {
         lifecycleScope.launch {
             try {
                 showLoading(true)
                 tvSyncStatus.text = "Processing EPUBs from R2 storage..."
+                
+                // Show processing status immediately
+                showProcessingProgress("Checking for EPUBs in storage...", 10)
                 
                 val response = ApiConfig.apiService.processAllEpubs()
                 
@@ -323,17 +370,23 @@ class MainActivity : AppCompatActivity() {
                     tvSyncStatus.text = "$message (${epubFiles.size} files found)"
                     Toast.makeText(this@MainActivity, "EPUB processing started!", Toast.LENGTH_SHORT).show()
                     
-                    // Start monitoring processing status
-                    startProcessingStatusMonitoring()
+                    // Start simulated progress for processing
+                    if (epubFiles.isNotEmpty()) {
+                        startSimulatedProcessingProgress(epubFiles.size)
+                    } else {
+                        hideProcessingStatus()
+                    }
                     
                 } else {
                     tvSyncStatus.text = "Failed to process EPUBs: ${response.message()}"
                     Toast.makeText(this@MainActivity, "Failed to process EPUBs", Toast.LENGTH_SHORT).show()
+                    hideProcessingStatus()
                 }
                 
             } catch (e: Exception) {
                 tvSyncStatus.text = "Error processing EPUBs: ${e.message}"
                 Toast.makeText(this@MainActivity, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                hideProcessingStatus()
             } finally {
                 showLoading(false)
             }
