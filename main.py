@@ -182,6 +182,36 @@ def list_bucket():
         logger.error(f"List bucket error: {e}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/stream/<user_id>/<job_id>/<chapter_file>')
+def stream_audio(user_id, job_id, chapter_file):
+    """Stream audio file through Flask proxy from R2"""
+    try:
+        r2, bucket_name = get_r2_client()
+        if not r2 or not bucket_name:
+            return jsonify({'error': 'R2 not configured'}), 500
+        
+        r2_key = f"{user_id}/{job_id}/{chapter_file}"
+        
+        # Get file from R2
+        response = r2.get_object(Bucket=bucket_name, Key=r2_key)
+        audio_data = response['Body'].read()
+        
+        # Return audio file with proper headers
+        from flask import Response
+        return Response(
+            audio_data,
+            mimetype='audio/mpeg',
+            headers={
+                'Content-Disposition': f'inline; filename="{chapter_file}"',
+                'Accept-Ranges': 'bytes',
+                'Content-Length': str(len(audio_data))
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"Stream audio error: {e}")
+        return jsonify({'error': str(e)}), 404
+
 @app.route('/api/process-all-epubs', methods=['POST'])
 def process_all_epubs():
     """Manually trigger processing of all EPUBs in bucket"""
@@ -509,11 +539,21 @@ def download_audiobook(audiobook_id):
                 metadata_obj = r2.get_object(Bucket=bucket_name, Key=metadata_key)
                 metadata = json.loads(metadata_obj['Body'].read())
                 
+                # Update chapter URLs to use Flask streaming proxy
+                updated_chapters = []
+                for chapter in metadata['chapters']:
+                    updated_chapter = chapter.copy()
+                    # Replace R2 URL with Flask streaming URL
+                    r2_key = updated_chapter['r2_key']
+                    user_id, job_id, filename = r2_key.split('/')
+                    updated_chapter['url'] = f"http://127.0.0.1:5001/api/stream/{user_id}/{job_id}/{filename}"
+                    updated_chapters.append(updated_chapter)
+                
                 return jsonify({
                     'audiobook_id': audiobook_id,
                     'title': metadata['book_title'],
-                    'chapters': metadata['chapters'],
-                    'total_chapters': len(metadata['chapters'])
+                    'chapters': updated_chapters,
+                    'total_chapters': len(updated_chapters)
                 })
             except:
                 continue

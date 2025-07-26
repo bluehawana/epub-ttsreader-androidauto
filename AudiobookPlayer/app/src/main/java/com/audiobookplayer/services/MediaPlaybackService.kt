@@ -58,10 +58,20 @@ class MediaPlaybackService : Service() {
     
     fun loadChapter(chapterIndex: Int) {
         currentAudiobook?.let { audiobook ->
-            val chapterFiles = fileManager.getChapterFiles(audiobook.id)
-            if (chapterIndex >= 0 && chapterIndex < chapterFiles.size) {
-                val chapterFile = chapterFiles[chapterIndex]
-                loadAudioFile(chapterFile)
+            if (chapterIndex >= 0 && chapterIndex < audiobook.chaptersList.size) {
+                val chapter = audiobook.chaptersList[chapterIndex]
+                
+                // Use R2 URL for streaming if available, otherwise try local file
+                if (chapter.url.isNotEmpty()) {
+                    loadAudioFromUrl(chapter.url)
+                } else {
+                    // Fallback to local file if URL not available
+                    val chapterFiles = fileManager.getChapterFiles(audiobook.id)
+                    if (chapterIndex < chapterFiles.size) {
+                        val chapterFile = chapterFiles[chapterIndex]
+                        loadAudioFile(chapterFile)
+                    }
+                }
                 currentChapter = chapterIndex
             }
         }
@@ -82,6 +92,29 @@ class MediaPlaybackService : Service() {
                 }
                 setOnErrorListener { _, what, extra ->
                     // Handle error
+                    false
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+    
+    private fun loadAudioFromUrl(url: String) {
+        mediaPlayer?.release()
+        mediaPlayer = MediaPlayer().apply {
+            try {
+                setDataSource(url)
+                prepareAsync()
+                setOnPreparedListener {
+                    // Ready to play from stream
+                }
+                setOnCompletionListener {
+                    // Chapter completed, move to next
+                    nextChapter()
+                }
+                setOnErrorListener { _, what, extra ->
+                    // Handle streaming error, could fallback to local if available
                     false
                 }
             } catch (e: Exception) {
@@ -128,7 +161,7 @@ class MediaPlaybackService : Service() {
     
     fun nextChapter() {
         currentAudiobook?.let { audiobook ->
-            if (currentChapter < audiobook.totalChapters - 1) {
+            if (currentChapter < audiobook.chaptersList.size - 1) {
                 loadChapter(currentChapter + 1)
             }
         }

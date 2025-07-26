@@ -6,22 +6,22 @@ data class Audiobook(
     val id: String,
     val title: String,
     val author: String? = "Unknown Author",
-    val chapters: List<Chapter>,
-    val totalChapters: Int,
-    val createdAt: String,
-    val downloadUrl: String,
+    val chapters: Int,  // Changed from List<Chapter> to Int to match API
+    val created_at: String,  // Changed from createdAt to match API
+    val download_url: String,  // Changed from downloadUrl to match API  
     var isDownloaded: Boolean = false,
     var localPath: String? = null,
     var currentChapter: Int = 0,
     var currentPosition: Long = 0L,
-    var totalDuration: Long = 0L
+    var totalDuration: Long = 0L,
+    var chaptersList: List<Chapter> = emptyList()  // Separate field for actual chapters
 ) : Serializable
 
 data class Chapter(
     val chapter: Int,
     val title: String,
     val url: String,
-    val r2Key: String,
+    val r2_key: String,  // Changed from r2Key to match API
     val duration: Int,
     var localPath: String? = null,
     var isDownloaded: Boolean = false
@@ -33,10 +33,10 @@ data class AudiobookResponse(
 )
 
 data class AudiobookDetails(
-    val audiobookId: String,
+    val audiobook_id: String,  // Changed from audiobookId to match API
     val title: String,
     val chapters: List<Chapter>,
-    val totalChapters: Int
+    val total_chapters: Int  // Changed from totalChapters to match API
 )
 
 data class JobStatus(

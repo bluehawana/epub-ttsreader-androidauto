@@ -38,7 +38,7 @@ interface AudiobookApiService {
 }
 
 object ApiConfig {
-    const val BASE_URL = "https://epub-audiobook-service-ab00bb696e09.herokuapp.com/"
+    const val BASE_URL = "http://127.0.0.1:5001/"
     
     // Retrofit instance
     val retrofit: retrofit2.Retrofit by lazy {

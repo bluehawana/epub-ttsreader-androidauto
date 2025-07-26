@@ -85,11 +85,21 @@ class AutoMediaBrowserService : MediaBrowserService() {
                         audiobooks.clear()
                         audiobooks.addAll(response.body()!!.audiobooks)
                         
-                        // Check which are downloaded
+                        // Check which are downloaded and fetch chapter details for streaming
                         audiobooks.forEach { audiobook ->
                             audiobook.isDownloaded = fileManager.isAudiobookDownloaded(audiobook.id)
                             if (audiobook.isDownloaded) {
                                 audiobook.localPath = fileManager.getAudiobookPath(audiobook.id)
+                            }
+                            
+                            // Fetch detailed chapter information for streaming
+                            try {
+                                val detailsResponse = ApiConfig.apiService.getAudiobookDetails(audiobook.id)
+                                if (detailsResponse.isSuccessful && detailsResponse.body() != null) {
+                                    audiobook.chaptersList = detailsResponse.body()!!.chapters
+                                }
+                            } catch (e: Exception) {
+                                Log.w(TAG, "Could not fetch chapter details for ${audiobook.id}: ${e.message}")
                             }
                         }
                         
@@ -168,8 +178,8 @@ class AutoMediaBrowserService : MediaBrowserService() {
             AUDIOBOOKS_ID -> {
                 val audiobookItems = mutableListOf<MediaBrowserCompat.MediaItem>()
                 
-                // Only show downloaded audiobooks in Android Auto for safety
-                audiobooks.filter { it.isDownloaded }.forEach { audiobook ->
+                // Show all available audiobooks for streaming from R2
+                audiobooks.forEach { audiobook ->
                     val description = MediaDescriptionCompat.Builder()
                         .setMediaId("audiobook_${audiobook.id}")
                         .setTitle(audiobook.title)
@@ -217,7 +227,7 @@ class AutoMediaBrowserService : MediaBrowserService() {
             
             if (mediaId?.startsWith("audiobook_") == true) {
                 val audiobookId = mediaId.removePrefix("audiobook_")
-                val audiobook = audiobooks.find { it.id == audiobookId && it.isDownloaded }
+                val audiobook = audiobooks.find { it.id == audiobookId }
                 
                 if (audiobook != null) {
                     playAudiobook(audiobook)

@@ -18,7 +18,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Your bot token and backend URL
-BOT_TOKEN = "8043237984:AAGOCQYtGyxTr9Jrwk6u9bN2bkoWts-qAFQ"
+BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
 BACKEND_URL = "https://epub-audiobook-service-ab00bb696e09.herokuapp.com"
 
 class CarBookReaderBot:
