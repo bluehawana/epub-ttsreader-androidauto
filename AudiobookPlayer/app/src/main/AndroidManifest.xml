@@ -32,6 +32,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.AudiobookPlayer"
         android:usesCleartextTraffic="true"
+        android:networkSecurityConfig="@xml/network_security_config"
         tools:targetApi="31">
         
         <!-- Main Activity -->
@@ -61,6 +62,12 @@
         <!-- QR Code Scanner Activity -->
         <activity
             android:name=".activities.QRScannerActivity"
+            android:exported="false"
+            android:theme="@style/Theme.AudiobookPlayer" />
+        
+        <!-- Debug Activity -->
+        <activity
+            android:name=".activities.DebugActivity"
             android:exported="false"
             android:theme="@style/Theme.AudiobookPlayer" />
         

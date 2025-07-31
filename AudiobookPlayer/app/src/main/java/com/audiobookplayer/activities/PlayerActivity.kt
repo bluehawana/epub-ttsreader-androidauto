@@ -12,10 +12,13 @@ import android.widget.SeekBar
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import com.audiobookplayer.R
 import com.audiobookplayer.models.Audiobook
+import com.audiobookplayer.services.ApiConfig
 import com.audiobookplayer.services.MediaPlaybackService
 import com.audiobookplayer.utils.FileManager
+import kotlinx.coroutines.launch
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 
@@ -50,6 +53,8 @@ class PlayerActivity : AppCompatActivity() {
     private var isPlaying = false
     private var playbackSpeed = 1.0f
     private var isMuted = false
+    private var currentDuration = 0
+    private var currentPosition = 0
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
@@ -59,6 +64,14 @@ class PlayerActivity : AppCompatActivity() {
             
             // Initialize player with audiobook
             mediaService?.loadAudiobook(audiobook)
+            
+            // Set up progress callback
+            mediaService?.setProgressCallback { position, duration ->
+                runOnUiThread {
+                    updateProgress(position, duration)
+                }
+            }
+            
             updateUI()
         }
 
@@ -74,6 +87,17 @@ class PlayerActivity : AppCompatActivity() {
         
         // Get audiobook from intent
         audiobook = intent.getSerializableExtra("audiobook") as Audiobook
+        
+        // Debug logging and chapter loading fix
+        android.util.Log.d("PlayerActivity", "Received audiobook: ${audiobook.title}")
+        android.util.Log.d("PlayerActivity", "Chapters count: ${audiobook.chapters}")
+        android.util.Log.d("PlayerActivity", "ChaptersList size: ${audiobook.chaptersList.size}")
+        
+        // If chaptersList is empty, reload chapter details
+        if (audiobook.chaptersList.isEmpty()) {
+            android.util.Log.d("PlayerActivity", "ChaptersList is empty, reloading from API...")
+            loadChapterDetails()
+        }
         
         initViews()
         initServices()
@@ -152,13 +176,19 @@ class PlayerActivity : AppCompatActivity() {
         
         seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                if (fromUser) {
-                    mediaService?.seekTo(progress.toLong())
+                if (fromUser && currentDuration > 0) {
+                    val seekPosition = (progress * currentDuration / 100).toLong()
+                    mediaService?.seekTo(seekPosition)
                 }
             }
             
-            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
-            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {
+                // User started dragging, could pause updates temporarily
+            }
+            
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {
+                // User finished dragging, resume updates
+            }
         })
     }
 
@@ -177,11 +207,47 @@ class PlayerActivity : AppCompatActivity() {
     }
     
     private fun updateChapterInfo() {
-        tvChapterInfo.text = getString(
-            R.string.chapter_format, 
-            currentChapter + 1, 
-            audiobook.chapters
-        )
+        val chapterText = if (audiobook.chaptersList.isNotEmpty() && currentChapter < audiobook.chaptersList.size) {
+            val chapter = audiobook.chaptersList[currentChapter]
+            val durationText = if (chapter.duration > 0) {
+                " • ${formatDuration(chapter.duration * 1000)}" // Convert seconds to milliseconds
+            } else {
+                ""
+            }
+            "Chapter ${currentChapter + 1} of ${audiobook.chapters}$durationText"
+        } else {
+            "Chapter ${currentChapter + 1} of ${audiobook.chapters}"
+        }
+        tvChapterInfo.text = chapterText
+    }
+    
+    private fun updateProgress(position: Int, duration: Int) {
+        currentPosition = position
+        currentDuration = duration
+        
+        // Update time displays
+        tvCurrentTime.text = formatDuration(position)
+        tvTotalTime.text = formatDuration(duration)
+        
+        // Update seek bar
+        if (duration > 0) {
+            val progress = (position * 100 / duration)
+            seekBar.progress = progress
+        }
+    }
+    
+    private fun formatDuration(milliseconds: Int): String {
+        val totalSeconds = milliseconds / 1000
+        val minutes = totalSeconds / 60
+        val seconds = totalSeconds % 60
+        
+        return if (minutes >= 60) {
+            val hours = minutes / 60
+            val remainingMinutes = minutes % 60
+            String.format("%d:%02d:%02d", hours, remainingMinutes, seconds)
+        } else {
+            String.format("%d:%02d", minutes, seconds)
+        }
     }
     
     private fun updatePlayPauseButton() {
@@ -199,28 +265,52 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun togglePlayPause() {
+        android.util.Log.d("PlayerActivity", "togglePlayPause() called - current isPlaying: $isPlaying")
+        android.util.Log.d("PlayerActivity", "MediaService bound: $isBound, service: $mediaService")
+        
         if (isPlaying) {
+            android.util.Log.d("PlayerActivity", "Calling mediaService.pause()")
             mediaService?.pause()
         } else {
+            android.util.Log.d("PlayerActivity", "Calling mediaService.play()")
             mediaService?.play()
         }
         isPlaying = !isPlaying
+        android.util.Log.d("PlayerActivity", "Updated isPlaying to: $isPlaying")
         updatePlayPauseButton()
     }
     
     private fun previousChapter() {
         if (currentChapter > 0) {
+            val wasPlaying = isPlaying
             currentChapter--
             mediaService?.loadChapter(currentChapter)
             updateChapterInfo()
+            // Reset progress display
+            updateProgress(0, 0)
+            // Resume playback after a short delay if it was playing
+            if (wasPlaying) {
+                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                    mediaService?.play()
+                }, 1000) // Give MediaPlayer time to prepare
+            }
         }
     }
     
     private fun nextChapter() {
         if (currentChapter < audiobook.chapters - 1) {
+            val wasPlaying = isPlaying
             currentChapter++
             mediaService?.loadChapter(currentChapter)
             updateChapterInfo()
+            // Reset progress display
+            updateProgress(0, 0)
+            // Resume playback after a short delay if it was playing
+            if (wasPlaying) {
+                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                    mediaService?.play()
+                }, 1000) // Give MediaPlayer time to prepare
+            }
         }
     }
     
@@ -249,6 +339,28 @@ class PlayerActivity : AppCompatActivity() {
             audioManager.setStreamMute(AudioManager.STREAM_MUSIC, false)
         }
         updateVolumeButton()
+    }
+
+    private fun loadChapterDetails() {
+        lifecycleScope.launch {
+            try {
+                val response = ApiConfig.apiService.getAudiobookDetails(audiobook.id)
+                if (response.isSuccessful && response.body() != null) {
+                    val details = response.body()!!
+                    audiobook.chaptersList = details.chapters
+                    android.util.Log.d("PlayerActivity", "Reloaded ${details.chapters.size} chapters")
+                    
+                    // If service is already bound, reload the audiobook
+                    if (isBound) {
+                        mediaService?.loadAudiobook(audiobook)
+                    }
+                } else {
+                    android.util.Log.e("PlayerActivity", "Failed to reload chapter details")
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("PlayerActivity", "Error reloading chapters: ${e.message}")
+            }
+        }
     }
 
     override fun onDestroy() {

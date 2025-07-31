@@ -29,6 +29,12 @@ class MediaPlaybackService : Service() {
     private var currentChapter = 0
     private var mediaSession: MediaSessionCompat? = null
     private var notificationManager: NotificationManager? = null
+    private var shouldStartWhenPrepared = false
+    
+    // Progress tracking
+    private var progressUpdateHandler: android.os.Handler? = null
+    private var progressUpdateRunnable: Runnable? = null
+    private var progressCallback: ((Int, Int) -> Unit)? = null
     
     companion object {
         private const val NOTIFICATION_ID = 1001
@@ -44,6 +50,10 @@ class MediaPlaybackService : Service() {
         fileManager = FileManager(this)
         notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         createNotificationChannel()
+        
+        // Initialize progress tracking
+        progressUpdateHandler = android.os.Handler(android.os.Looper.getMainLooper())
+        setupProgressUpdates()
     }
 
     override fun onBind(intent: Intent): IBinder {
@@ -51,6 +61,11 @@ class MediaPlaybackService : Service() {
     }
 
     fun loadAudiobook(audiobook: Audiobook) {
+        android.util.Log.d("MediaPlaybackService", "loadAudiobook() called")
+        android.util.Log.d("MediaPlaybackService", "Audiobook: ${audiobook.title}")
+        android.util.Log.d("MediaPlaybackService", "Current chapter: ${audiobook.currentChapter}")
+        android.util.Log.d("MediaPlaybackService", "Chapters list size: ${audiobook.chaptersList.size}")
+        
         currentAudiobook = audiobook
         currentChapter = audiobook.currentChapter
         loadChapter(currentChapter)
@@ -58,12 +73,16 @@ class MediaPlaybackService : Service() {
     
     fun loadChapter(chapterIndex: Int) {
         currentAudiobook?.let { audiobook ->
+            // Debug logging
+            android.util.Log.d("MediaPlaybackService", "loadChapter: index=$chapterIndex, chapters.size=${audiobook.chaptersList.size}")
+            
             if (chapterIndex >= 0 && chapterIndex < audiobook.chaptersList.size) {
                 val chapter = audiobook.chaptersList[chapterIndex]
+                android.util.Log.d("MediaPlaybackService", "Loading chapter: ${chapter.title}, URL: ${chapter.url}")
                 
                 // Use R2 URL for streaming if available, otherwise try local file
                 if (chapter.url.isNotEmpty()) {
-                    loadAudioFromUrl(chapter.url)
+                    loadAudioFromUrlWithFallback(chapter)
                 } else {
                     // Fallback to local file if URL not available
                     val chapterFiles = fileManager.getChapterFiles(audiobook.id)
@@ -73,6 +92,8 @@ class MediaPlaybackService : Service() {
                     }
                 }
                 currentChapter = chapterIndex
+            } else {
+                android.util.Log.w("MediaPlaybackService", "Invalid chapter index: $chapterIndex (max: ${audiobook.chaptersList.size})")
             }
         }
     }
@@ -100,41 +121,224 @@ class MediaPlaybackService : Service() {
         }
     }
     
-    private fun loadAudioFromUrl(url: String) {
+    private fun loadAudioFromUrlWithFallback(chapter: com.audiobookplayer.models.Chapter) {
+        android.util.Log.d("MediaPlaybackService", "loadAudioFromUrlWithFallback: ${chapter.url}")
+        
+        // Try primary URL with retry logic
+        loadAudioFromUrlWithRetry(chapter.url, maxRetries = 2) { success ->
+            if (!success) {
+                android.util.Log.w("MediaPlaybackService", "Primary URL failed after retries, trying direct R2 URL")
+                // Try direct R2 URL as fallback
+                val directR2Url = generateDirectR2Url(chapter.r2_key)
+                if (directR2Url != null) {
+                    loadAudioFromUrlWithRetry(directR2Url, maxRetries = 1) { fallbackSuccess ->
+                        if (!fallbackSuccess) {
+                            android.util.Log.e("MediaPlaybackService", "Both URLs failed for chapter: ${chapter.title}")
+                            // Show error to user instead of auto-skipping
+                            notifyPlaybackError("Failed to load chapter: ${chapter.title}")
+                        }
+                    }
+                } else {
+                    android.util.Log.e("MediaPlaybackService", "No fallback URL available for chapter: ${chapter.title}")
+                    notifyPlaybackError("No valid URL for chapter: ${chapter.title}")
+                }
+            }
+        }
+    }
+    
+    private fun loadAudioFromUrlWithRetry(url: String, maxRetries: Int, callback: ((Boolean) -> Unit)? = null) {
+        var retryCount = 0
+        
+        fun attemptLoad() {
+            android.util.Log.d("MediaPlaybackService", "Attempting to load URL (attempt ${retryCount + 1}/$maxRetries): $url")
+            
+            loadAudioFromUrl(url) { success ->
+                if (success) {
+                    callback?.invoke(true)
+                } else if (retryCount < maxRetries - 1) {
+                    retryCount++
+                    android.util.Log.w("MediaPlaybackService", "Load failed, retrying in 2 seconds...")
+                    // Retry after 2 seconds
+                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                        attemptLoad()
+                    }, 2000)
+                } else {
+                    android.util.Log.e("MediaPlaybackService", "All retry attempts failed for URL: $url")
+                    callback?.invoke(false)
+                }
+            }
+        }
+        
+        attemptLoad()
+    }
+    
+    private fun notifyPlaybackError(message: String) {
+        android.util.Log.e("MediaPlaybackService", "Playback error: $message")
+        // You could broadcast this error to the UI or show a notification
+        // For now, just log it
+    }
+    
+    private fun setupProgressUpdates() {
+        progressUpdateRunnable = object : Runnable {
+            override fun run() {
+                mediaPlayer?.let { player ->
+                    if (player.isPlaying) {
+                        val currentPosition = player.currentPosition
+                        val duration = try { player.duration } catch (e: Exception) { 0 }
+                        
+                        // Notify callback with current position and duration
+                        progressCallback?.invoke(currentPosition, duration)
+                        
+                        // Schedule next update in 1 second
+                        progressUpdateHandler?.postDelayed(this, 1000)
+                    }
+                }
+            }
+        }
+    }
+    
+    private fun startProgressUpdates() {
+        stopProgressUpdates()
+        progressUpdateHandler?.post(progressUpdateRunnable!!)
+    }
+    
+    private fun stopProgressUpdates() {
+        progressUpdateRunnable?.let { runnable ->
+            progressUpdateHandler?.removeCallbacks(runnable)
+        }
+    }
+    
+    fun setProgressCallback(callback: (Int, Int) -> Unit) {
+        progressCallback = callback
+    }
+    
+    private fun generateDirectR2Url(r2Key: String): String? {
+        // Extract bucket name from environment or use default
+        // Format: https://pub-{bucket}.r2.dev/{r2_key}
+        return try {
+            // This would need to be configured based on your R2 setup
+            "https://pub-your-bucket-name.r2.dev/$r2Key"
+        } catch (e: Exception) {
+            android.util.Log.w("MediaPlaybackService", "Could not generate direct R2 URL: $e")
+            null
+        }
+    }
+    
+    private fun loadAudioFromUrl(url: String, callback: ((Boolean) -> Unit)? = null) {
+        android.util.Log.d("MediaPlaybackService", "loadAudioFromUrl: Starting to load URL: $url")
         mediaPlayer?.release()
         mediaPlayer = MediaPlayer().apply {
             try {
-                setDataSource(url)
+                android.util.Log.d("MediaPlaybackService", "Setting data source: $url")
+                
+                // For HTTP URLs, use string-based setDataSource which works better with streaming
+                if (url.startsWith("http")) {
+                    setDataSource(url)
+                } else {
+                    // For local files, use URI-based approach
+                    setDataSource(this@MediaPlaybackService, android.net.Uri.parse(url))
+                }
+                android.util.Log.d("MediaPlaybackService", "Starting prepareAsync()")
                 prepareAsync()
                 setOnPreparedListener {
-                    // Ready to play from stream
+                    android.util.Log.d("MediaPlaybackService", "MediaPlayer prepared successfully for URL: $url")
+                    android.util.Log.d("MediaPlaybackService", "Duration: ${duration}ms")
+                    callback?.invoke(true)
+                    // Auto-start if play was requested while preparing
+                    if (shouldStartWhenPrepared) {
+                        android.util.Log.d("MediaPlaybackService", "Auto-starting playback as requested")
+                        shouldStartWhenPrepared = false
+                        start()
+                        startForegroundService()
+                        startProgressUpdates()
+                    }
                 }
                 setOnCompletionListener {
-                    // Chapter completed, move to next
+                    android.util.Log.d("MediaPlaybackService", "Chapter completed, moving to next")
                     nextChapter()
                 }
-                setOnErrorListener { _, what, extra ->
-                    // Handle streaming error, could fallback to local if available
+                setOnErrorListener { mp, what, extra ->
+                    android.util.Log.e("MediaPlaybackService", "MediaPlayer error - what: $what, extra: $extra")
+                    android.util.Log.e("MediaPlaybackService", "Failed URL: $url")
+                    
+                    // More detailed error handling - don't auto-skip on first error
+                    when (what) {
+                        MediaPlayer.MEDIA_ERROR_UNSUPPORTED -> {
+                            android.util.Log.e("MediaPlaybackService", "Unsupported media format for URL: $url")
+                        }
+                        MediaPlayer.MEDIA_ERROR_IO -> {
+                            android.util.Log.e("MediaPlaybackService", "IO error - network issue or invalid URL: $url")
+                        }
+                        MediaPlayer.MEDIA_ERROR_MALFORMED -> {
+                            android.util.Log.e("MediaPlaybackService", "Malformed media data: $url")
+                        }
+                        MediaPlayer.MEDIA_ERROR_TIMED_OUT -> {
+                            android.util.Log.e("MediaPlaybackService", "Network timeout: $url")
+                        }
+                        else -> {
+                            android.util.Log.e("MediaPlaybackService", "Unknown media error: $what, extra: $extra")
+                        }
+                    }
+                    
+                    // Notify callback of failure
+                    callback?.invoke(false)
+                    // Return false to let the system handle the error (don't auto-skip)
+                    false
+                }
+                setOnInfoListener { mp, what, extra ->
+                    when (what) {
+                        MediaPlayer.MEDIA_INFO_BUFFERING_START -> {
+                            android.util.Log.d("MediaPlaybackService", "Buffering started")
+                        }
+                        MediaPlayer.MEDIA_INFO_BUFFERING_END -> {
+                            android.util.Log.d("MediaPlaybackService", "Buffering ended")
+                        }
+                    }
                     false
                 }
             } catch (e: Exception) {
+                android.util.Log.e("MediaPlaybackService", "Exception loading audio from URL: $url", e)
                 e.printStackTrace()
+                callback?.invoke(false)
             }
         }
     }
     
     fun play() {
-        mediaPlayer?.start()
-        startForegroundService()
+        android.util.Log.d("MediaPlaybackService", "play() called")
+        mediaPlayer?.let { player ->
+            android.util.Log.d("MediaPlaybackService", "MediaPlayer state - isPlaying: ${player.isPlaying}")
+            try {
+                // Check if MediaPlayer is prepared before starting
+                val duration = try { player.duration } catch (e: Exception) { -1 }
+                android.util.Log.d("MediaPlaybackService", "MediaPlayer duration: $duration")
+                
+                if (duration > 0) {
+                    player.start()
+                    android.util.Log.d("MediaPlaybackService", "MediaPlayer started successfully")
+                    startForegroundService()
+                    startProgressUpdates()
+                } else {
+                    android.util.Log.d("MediaPlaybackService", "MediaPlayer not ready, setting shouldStartWhenPrepared = true")
+                    shouldStartWhenPrepared = true
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("MediaPlaybackService", "Error starting MediaPlayer", e)
+                android.util.Log.d("MediaPlaybackService", "Setting shouldStartWhenPrepared = true due to error")
+                shouldStartWhenPrepared = true
+            }
+        } ?: android.util.Log.w("MediaPlaybackService", "MediaPlayer is null, cannot play")
     }
     
     fun pause() {
         mediaPlayer?.pause()
+        stopProgressUpdates()
         updateNotification()
     }
     
     fun stop() {
         mediaPlayer?.stop()
+        stopProgressUpdates()
         stopForeground(true)
         stopSelf()
     }
@@ -282,8 +486,11 @@ class MediaPlaybackService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        stopProgressUpdates()
         mediaPlayer?.release()
         mediaPlayer = null
         mediaSession?.release()
+        progressUpdateHandler = null
+        progressCallback = null
     }
 }

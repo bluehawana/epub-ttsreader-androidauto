@@ -1,5 +1,6 @@
 import os
 import logging
+import re
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import asyncio
@@ -184,7 +185,7 @@ def list_bucket():
 
 @app.route('/api/stream/<user_id>/<job_id>/<chapter_file>')
 def stream_audio(user_id, job_id, chapter_file):
-    """Stream audio file through Flask proxy from R2"""
+    """Stream audio file through Flask proxy from R2 with range support"""
     try:
         r2, bucket_name = get_r2_client()
         if not r2 or not bucket_name:
@@ -192,7 +193,51 @@ def stream_audio(user_id, job_id, chapter_file):
         
         r2_key = f"{user_id}/{job_id}/{chapter_file}"
         
-        # Get file from R2
+        # Get file metadata first
+        try:
+            head_response = r2.head_object(Bucket=bucket_name, Key=r2_key)
+            file_size = head_response['ContentLength']
+        except Exception as e:
+            logger.error(f"File not found in R2: {r2_key}")
+            return jsonify({'error': 'File not found'}), 404
+        
+        # Handle range requests for better streaming
+        range_header = request.headers.get('Range')
+        if range_header:
+            # Parse range header: bytes=start-end
+            range_match = re.match(r'bytes=(\d+)-(\d*)', range_header)
+            if range_match:
+                start = int(range_match.group(1))
+                end = int(range_match.group(2)) if range_match.group(2) else file_size - 1
+                
+                # Ensure end doesn't exceed file size
+                end = min(end, file_size - 1)
+                
+                try:
+                    # Get partial content from R2
+                    range_str = f"bytes={start}-{end}"
+                    response = r2.get_object(Bucket=bucket_name, Key=r2_key, Range=range_str)
+                    audio_data = response['Body'].read()
+                    
+                    from flask import Response
+                    return Response(
+                        audio_data,
+                        206,  # Partial Content
+                        headers={
+                            'Content-Type': 'audio/mpeg',
+                            'Accept-Ranges': 'bytes',
+                            'Content-Range': f'bytes {start}-{end}/{file_size}',
+                            'Content-Length': str(len(audio_data)),
+                            'Cache-Control': 'public, max-age=3600',
+                            'Access-Control-Allow-Origin': '*',
+                            'Access-Control-Allow-Headers': 'Range'
+                        }
+                    )
+                except Exception as range_error:
+                    logger.warning(f"Range request failed, falling back to full file: {range_error}")
+                    # Fall through to full file download
+        
+        # Get full file from R2
         response = r2.get_object(Bucket=bucket_name, Key=r2_key)
         audio_data = response['Body'].read()
         
@@ -204,7 +249,10 @@ def stream_audio(user_id, job_id, chapter_file):
             headers={
                 'Content-Disposition': f'inline; filename="{chapter_file}"',
                 'Accept-Ranges': 'bytes',
-                'Content-Length': str(len(audio_data))
+                'Content-Length': str(len(audio_data)),
+                'Cache-Control': 'public, max-age=3600',
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Headers': 'Range'
             }
         )
         

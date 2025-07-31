@@ -121,6 +121,13 @@ class MainActivity : AppCompatActivity() {
         btnProcessEpubs.setOnClickListener {
             processAllEpubs()
         }
+        
+        // Add debug menu (long press on sync button)
+        btnSync.setOnLongClickListener {
+            val intent = Intent(this, DebugActivity::class.java)
+            startActivity(intent)
+            true
+        }
     }
 
     private fun loadSavedUserId() {
@@ -230,9 +237,24 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openPlayer(audiobook: Audiobook) {
-        val intent = Intent(this, PlayerActivity::class.java)
-        intent.putExtra("audiobook", audiobook)
-        startActivity(intent)
+        // Load chapter details for streaming before opening player
+        lifecycleScope.launch {
+            try {
+                val response = ApiConfig.apiService.getAudiobookDetails(audiobook.id)
+                if (response.isSuccessful && response.body() != null) {
+                    val details = response.body()!!
+                    audiobook.chaptersList = details.chapters
+                    
+                    val intent = Intent(this@MainActivity, PlayerActivity::class.java)
+                    intent.putExtra("audiobook", audiobook)
+                    startActivity(intent)
+                } else {
+                    Toast.makeText(this@MainActivity, "Failed to load audiobook details", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                Toast.makeText(this@MainActivity, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     private fun showLoading(show: Boolean) {

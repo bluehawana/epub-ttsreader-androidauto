@@ -51,7 +51,7 @@ class AudiobookAdapter(
             tvAuthor.text = audiobook.author ?: "Unknown Author"
             tvChapters.text = "${audiobook.chapters} chapters"
             
-            // Update UI based on download status
+            // Update UI based on download status - Enable streaming for all books
             when {
                 audiobook.isDownloaded -> {
                     tvStatus.text = "Downloaded"
@@ -62,20 +62,18 @@ class AudiobookAdapter(
                     progressDownload.visibility = View.GONE
                 }
                 else -> {
-                    tvStatus.text = "Online"
+                    tvStatus.text = "Stream"
                     tvStatus.setBackgroundResource(R.drawable.rounded_background_primary)
-                    btnPlay.isEnabled = false
+                    btnPlay.isEnabled = true  // Enable streaming playback
                     btnDownload.text = "Download"
                     btnDownload.setIconResource(R.drawable.ic_download)
                     progressDownload.visibility = View.GONE
                 }
             }
 
-            // Click listeners
+            // Click listeners - Allow both downloaded and streaming playback
             btnPlay.setOnClickListener { 
-                if (audiobook.isDownloaded) {
-                    onPlayClick(audiobook)
-                }
+                onPlayClick(audiobook)  // Always allow playback - will stream if not downloaded
             }
             
             btnDownload.setOnClickListener { 
@@ -90,11 +88,9 @@ class AudiobookAdapter(
                 showPopupMenu(view, audiobook)
             }
             
-            // Item click to play if downloaded
+            // Item click to play - allow streaming
             itemView.setOnClickListener {
-                if (audiobook.isDownloaded) {
-                    onPlayClick(audiobook)
-                }
+                onPlayClick(audiobook)  // Always allow playback
             }
         }
 
