@@ -81,7 +81,8 @@
             </intent-filter>
         </service>
         
-        <!-- Android Auto Media Browser Service -->
+        <!-- Android Auto Media Browser Service - Temporarily disabled for build -->
+        <!--
         <service
             android:name=".services.AutoMediaBrowserService"
             android:enabled="true"
@@ -90,6 +91,7 @@
                 <action android:name="android.media.browse.MediaBrowserService" />
             </intent-filter>
         </service>
+        -->
         
         <!-- Android Auto metadata -->
         <meta-data

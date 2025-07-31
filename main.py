@@ -546,7 +546,7 @@ def download_audiobook(audiobook_id):
                     # Replace R2 URL with Flask streaming URL
                     r2_key = updated_chapter['r2_key']
                     user_id, job_id, filename = r2_key.split('/')
-                    updated_chapter['url'] = f"http://127.0.0.1:5001/api/stream/{user_id}/{job_id}/{filename}"
+                    updated_chapter['url'] = f"https://epub-audiobook-service-ab00bb696e09.herokuapp.com/api/stream/{user_id}/{job_id}/{filename}"
                     updated_chapters.append(updated_chapter)
                 
                 return jsonify({

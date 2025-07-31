@@ -49,7 +49,7 @@ class AudiobookAdapter(
         fun bind(audiobook: Audiobook) {
             tvTitle.text = audiobook.title
             tvAuthor.text = audiobook.author ?: "Unknown Author"
-            tvChapters.text = "${audiobook.totalChapters} chapters"
+            tvChapters.text = "${audiobook.chapters} chapters"
             
             // Update UI based on download status
             when {

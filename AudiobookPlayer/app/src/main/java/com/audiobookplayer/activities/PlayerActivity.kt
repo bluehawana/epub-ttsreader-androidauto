@@ -180,7 +180,7 @@ class PlayerActivity : AppCompatActivity() {
         tvChapterInfo.text = getString(
             R.string.chapter_format, 
             currentChapter + 1, 
-            audiobook.totalChapters
+            audiobook.chapters
         )
     }
     
@@ -217,7 +217,7 @@ class PlayerActivity : AppCompatActivity() {
     }
     
     private fun nextChapter() {
-        if (currentChapter < audiobook.totalChapters - 1) {
+        if (currentChapter < audiobook.chapters - 1) {
             currentChapter++
             mediaService?.loadChapter(currentChapter)
             updateChapterInfo()

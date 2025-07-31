@@ -8,6 +8,7 @@ import com.audiobookplayer.models.ProcessingStatus
 import com.audiobookplayer.models.QRCodeData
 import retrofit2.Response
 import retrofit2.http.GET
+import retrofit2.http.POST
 import retrofit2.http.Path
 
 interface AudiobookApiService {
@@ -38,7 +39,7 @@ interface AudiobookApiService {
 }
 
 object ApiConfig {
-    const val BASE_URL = "https://epub-audiobook-service.herokuapp.com/"
+    const val BASE_URL = "https://epub-audiobook-service-ab00bb696e09.herokuapp.com/"
     
     // Retrofit instance
     val retrofit: retrofit2.Retrofit by lazy {
