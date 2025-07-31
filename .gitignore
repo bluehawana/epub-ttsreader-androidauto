@@ -1,5 +1,7 @@
 # Security & Credentials - NEVER COMMIT THESE!
 .env
+.env.local
+run_claude.sh
 TELEGRAM_BOT_TOKEN=*
 *.key
 *.pem

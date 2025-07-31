@@ -1,8 +1,14 @@
 #!/bin/bash
 
-# Set Anthropic API token and base URL
-export ANTHROPIC_AUTH_TOKEN="sk-wldqMp1L48Uh85iQWgv05sRuUgtZxqyJAH92mW476z0SyiG4"
-export ANTHROPIC_BASE_URL="https://anyrouter.top"
+# Load environment variables from .env file
+if [ -f .env ]; then
+    export $(cat .env | grep -v '#' | xargs)
+fi
+
+# Load local overrides if they exist
+if [ -f .env.local ]; then
+    export $(cat .env.local | grep -v '#' | xargs)
+fi
 
 # Optional: Confirm to user
 echo "Environment variables set:"
