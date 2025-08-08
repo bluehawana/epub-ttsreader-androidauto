@@ -22,6 +22,7 @@ import android.widget.TextView
 import android.widget.LinearLayout
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
 import androidx.cardview.widget.CardView
 import com.google.android.material.progressindicator.LinearProgressIndicator
 import android.util.Log
@@ -154,9 +155,11 @@ class MainActivity : AppCompatActivity() {
                 showLoading(true)
                 tvSyncStatus.text = "Syncing audiobooks..."
                 
-                val response = ApiConfig.apiService.getUserAudiobooks(userId)
+                val response = withTimeoutOrNull(30000) {
+                    ApiConfig.apiService.getUserAudiobooks(userId)
+                }
                 
-                if (response.isSuccessful && response.body() != null) {
+                if (response?.isSuccessful == true && response.body() != null) {
                     val audiobookResponse = response.body()!!
                     audiobooks.clear()
                     audiobooks.addAll(audiobookResponse.audiobooks)
@@ -179,7 +182,8 @@ class MainActivity : AppCompatActivity() {
                     }
                     
                 } else {
-                    tvSyncStatus.text = "Sync failed: ${response.message()}"
+                    val errorMsg = response?.message() ?: "Connection timeout"
+                    tvSyncStatus.text = "Sync failed: $errorMsg"
                     Toast.makeText(this@MainActivity, "Failed to sync audiobooks", Toast.LENGTH_SHORT).show()
                 }
                 
