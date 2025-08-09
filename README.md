@@ -46,11 +46,11 @@ The service provides REST API endpoints for Android Auto apps:
 ## 💾 Architecture
 
 ```
-Telegram Bot → Heroku API → Azure TTS → S3 Storage → Android Auto
+Telegram Bot → Heroku API → Azure TTS → R2 Storage → Android Auto
 ```
 
 - **Database:** PostgreSQL (audiobooks, chapters, users)
-- **Storage:** AWS S3 via Bucketeer addon
+- **Storage:** Cloudflare R2 (migrated from S3 for cost optimization)
 - **Processing:** Async EPUB → MP3 conversion
 - **Authentication:** QR code linking for Android Auto
 
@@ -69,8 +69,49 @@ cp .env.example .env
 # Edit .env with your API keys
 
 # Run locally
-python main.py
+python3 main.py
+
+# OR use the provided startup script
+chmod +x start_epub_reader.sh
+./start_epub_reader.sh
 ```
+
+## 📖 EPUB Reader (PS4 Compatible)
+
+Access the web-based EPUB reader at: http://localhost:8000/reader
+
+Features:
+- Upload and read EPUB files directly in browser
+- PS4 controller support (D-pad navigation)
+- Chapter-by-chapter reading
+- Responsive design for TV screens
+
+## 🤖 Android App Testing
+
+### Firebase Integration
+The Android app now includes Firebase integration for enhanced analytics and testing:
+
+1. **Setup Firebase:**
+   - Added Google Services plugin to both root and app-level build.gradle
+   - Configured Firebase BoM (Bill of Materials) for dependency management
+   - Added `google-services.json` configuration file
+
+2. **Building APK for Testing:**
+   ```bash
+   cd AudiobookPlayer
+   ./gradlew assembleDebug  # Creates app-debug.apk for testing
+   ```
+
+3. **Testing on Physical Devices:**
+   - Successfully tested on OnePlus devices
+   - Firebase Test Lab integration available
+   - Supports Telegram ID authentication for audiobook synchronization
+
+### Device Compatibility
+- ✅ **PS4 Emulator** - Full functionality confirmed
+- ✅ **OnePlus Devices** - Successfully tested with Firebase
+- ✅ **Android Auto** - Primary target platform
+- 🔄 **Firebase Test Lab** - Available for automated testing
 
 ## 📊 Monitoring
 
@@ -80,4 +121,7 @@ heroku logs --tail --app epub-audiobook-service
 
 # Check health
 curl https://epub-audiobook-service.herokuapp.com/health
+
+# Firebase Analytics
+# Available through Firebase Console for app usage tracking
 ```
