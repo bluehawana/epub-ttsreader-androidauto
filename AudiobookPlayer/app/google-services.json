@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "215346136917",
+    "project_id": "bluehawana-android-auto",
+    "storage_bucket": "bluehawana-android-auto.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:215346136917:android:e56310f95c517df13a51dc",
+        "android_client_info": {
+          "package_name": "com.audiobookplayer"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDxeZp3JaY3ogohWKD87_mWrYe_Xdn_2Rs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:215346136917:android:911e404fb9d9cb903a51dc",
+        "android_client_info": {
+          "package_name": "com.carplayer.tv"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDxeZp3JaY3ogohWKD87_mWrYe_Xdn_2Rs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
