@@ -7,6 +7,7 @@ import com.audiobookplayer.models.JobStatus
 import com.audiobookplayer.models.ProcessingStatus
 import com.audiobookplayer.models.QRCodeData
 import retrofit2.Response
+import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.Path
@@ -18,6 +19,9 @@ interface AudiobookApiService {
     
     @GET("/api/download/{audiobookId}")
     suspend fun getAudiobookDetails(@Path("audiobookId") audiobookId: String): Response<AudiobookDetails>
+    
+    @DELETE("/api/audiobooks/{userId}/{audiobookId}")
+    suspend fun deleteAudiobook(@Path("userId") userId: String, @Path("audiobookId") audiobookId: String): Response<Map<String, Any>>
     
     @GET("/health")
     suspend fun getHealthStatus(): Response<Map<String, Any>>
@@ -40,6 +44,7 @@ interface AudiobookApiService {
 
 object ApiConfig {
     const val BASE_URL = "https://epub-audiobook-service-ab00bb696e09.herokuapp.com/"
+    const val FALLBACK_IP_URL = "https://18.208.60.216/" // Direct IP fallback
     
     // Retrofit instance with timeout configuration
     val retrofit: retrofit2.Retrofit by lazy {
@@ -47,6 +52,13 @@ object ApiConfig {
             .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
             .readTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
             .writeTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+            .addInterceptor { chain ->
+                val original = chain.request()
+                val requestBuilder = original.newBuilder()
+                    .header("Host", "epub-audiobook-service-ab00bb696e09.herokuapp.com")
+                val request = requestBuilder.build()
+                chain.proceed(request)
+            }
             .build()
             
         retrofit2.Retrofit.Builder()
@@ -56,7 +68,33 @@ object ApiConfig {
             .build()
     }
     
+    // Fallback retrofit with direct IP
+    val fallbackRetrofit: retrofit2.Retrofit by lazy {
+        val okHttpClient = okhttp3.OkHttpClient.Builder()
+            .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+            .writeTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+            .addInterceptor { chain ->
+                val original = chain.request()
+                val requestBuilder = original.newBuilder()
+                    .header("Host", "epub-audiobook-service-ab00bb696e09.herokuapp.com")
+                val request = requestBuilder.build()
+                chain.proceed(request)
+            }
+            .build()
+            
+        retrofit2.Retrofit.Builder()
+            .baseUrl(FALLBACK_IP_URL)
+            .client(okHttpClient)
+            .addConverterFactory(retrofit2.converter.gson.GsonConverterFactory.create())
+            .build()
+    }
+    
     val apiService: AudiobookApiService by lazy {
         retrofit.create(AudiobookApiService::class.java)
+    }
+    
+    val fallbackApiService: AudiobookApiService by lazy {
+        fallbackRetrofit.create(AudiobookApiService::class.java)
     }
 }

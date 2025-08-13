@@ -16,12 +16,30 @@ class AudiobookAdapter(
     private var audiobooks: List<Audiobook>,
     private val onPlayClick: (Audiobook) -> Unit,
     private val onDownloadClick: (Audiobook) -> Unit,
-    private val onDeleteClick: (Audiobook) -> Unit
+    private val onDeleteClick: (Audiobook) -> Unit,
+    private val onDeleteFromServerClick: (Audiobook) -> Unit
 ) : RecyclerView.Adapter<AudiobookAdapter.AudiobookViewHolder>() {
 
     fun updateAudiobooks(newAudiobooks: List<Audiobook>) {
-        audiobooks = newAudiobooks
+        audiobooks = newAudiobooks.toList()
         notifyDataSetChanged()
+    }
+    
+    private fun areListsEqual(oldList: List<Audiobook>, newList: List<Audiobook>): Boolean {
+        if (oldList.size != newList.size) return false
+        
+        for (i in oldList.indices) {
+            val oldBook = oldList[i]
+            val newBook = newList[i]
+            
+            if (oldBook.id != newBook.id || 
+                oldBook.title != newBook.title ||
+                oldBook.isDownloaded != newBook.isDownloaded ||
+                oldBook.chapters != newBook.chapters) {
+                return false
+            }
+        }
+        return true
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): AudiobookViewHolder {
@@ -114,6 +132,10 @@ class AudiobookAdapter(
                     }
                     R.id.menu_delete_local -> {
                         onDeleteClick(audiobook)
+                        true
+                    }
+                    R.id.menu_delete_server -> {
+                        onDeleteFromServerClick(audiobook)
                         true
                     }
                     R.id.menu_details -> {

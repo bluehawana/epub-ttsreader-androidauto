@@ -11,6 +11,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import com.audiobookplayer.R
 import com.audiobookplayer.adapters.AudiobookAdapter
 import com.audiobookplayer.models.Audiobook
+import com.audiobookplayer.models.Chapter
 import com.audiobookplayer.models.ProcessingStatus
 import com.audiobookplayer.services.ApiConfig
 import com.audiobookplayer.utils.FileManager
@@ -23,9 +24,15 @@ import android.widget.LinearLayout
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.suspendCancellableCoroutine
 import androidx.cardview.widget.CardView
 import com.google.android.material.progressindicator.LinearProgressIndicator
 import android.util.Log
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import android.content.Context
 
 class MainActivity : AppCompatActivity() {
     
@@ -98,6 +105,9 @@ class MainActivity : AppCompatActivity() {
             },
             onDeleteClick = { audiobook ->
                 deleteAudiobook(audiobook)
+            },
+            onDeleteFromServerClick = { audiobook ->
+                deleteAudiobookFromServer(audiobook)
             }
         )
         
@@ -123,6 +133,12 @@ class MainActivity : AppCompatActivity() {
             processAllEpubs()
         }
         
+        // Add network test button (temporary)
+        btnProcessEpubs.setOnLongClickListener {
+            testNetworkConnectivity()
+            true
+        }
+        
         // Add debug menu (long press on sync button)
         btnSync.setOnLongClickListener {
             val intent = Intent(this, DebugActivity::class.java)
@@ -145,9 +161,204 @@ class MainActivity : AppCompatActivity() {
         prefs.edit().putString("user_id", userId).apply()
     }
 
+    private fun isNetworkAvailable(): Boolean {
+        val connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val network = connectivityManager.activeNetwork ?: return false
+        val networkCapabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
+        return networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+    }
+    
+    private fun testNetworkConnectivity() {
+        lifecycleScope.launch {
+            try {
+                Log.d("MainActivity", "=== Network Connectivity Test ===")
+                Log.d("MainActivity", "Network available: ${isNetworkAvailable()}")
+                
+                Toast.makeText(this@MainActivity, "Testing network connectivity...", Toast.LENGTH_SHORT).show()
+                
+                // Test with Google DNS first
+                val googleDnsTest = withTimeoutOrNull(5000) {
+                    withContext(Dispatchers.IO) {
+                        try {
+                            val url = java.net.URL("https://8.8.8.8/")
+                            val connection = url.openConnection() as java.net.HttpURLConnection
+                            connection.requestMethod = "GET"
+                            connection.connectTimeout = 3000
+                            connection.readTimeout = 3000
+                            connection.responseCode == 200
+                        } catch (e: Exception) {
+                            Log.e("MainActivity", "Google DNS test failed: ${e.message}")
+                            false
+                        }
+                    }
+                }
+                
+                // Test hostname resolution
+                val hostnameTest = withTimeoutOrNull(5000) {
+                    withContext(Dispatchers.IO) {
+                        try {
+                            java.net.InetAddress.getByName("epub-audiobook-service-ab00bb696e09.herokuapp.com")
+                            true
+                        } catch (e: Exception) {
+                            Log.e("MainActivity", "Hostname resolution failed: ${e.message}")
+                            false
+                        }
+                    }
+                }
+                
+                // Test direct IP connection
+                val ipTest = withTimeoutOrNull(5000) {
+                    withContext(Dispatchers.IO) {
+                        try {
+                            val url = java.net.URL("https://18.208.60.216/health")
+                            val connection = url.openConnection() as java.net.HttpURLConnection
+                            connection.requestMethod = "GET"
+                            connection.connectTimeout = 3000
+                            connection.readTimeout = 3000
+                            connection.setRequestProperty("Host", "epub-audiobook-service-ab00bb696e09.herokuapp.com")
+                            connection.responseCode == 200
+                        } catch (e: Exception) {
+                            Log.e("MainActivity", "Direct IP test failed: ${e.message}")
+                            false
+                        }
+                    }
+                }
+                
+                val results = "Network Test Results:\n" +
+                        "System reports network: ${isNetworkAvailable()}\n" +
+                        "Google DNS reachable: ${googleDnsTest ?: "timeout"}\n" +
+                        "Hostname resolves: ${hostnameTest ?: "timeout"}\n" +
+                        "Direct IP works: ${ipTest ?: "timeout"}"
+                
+                Log.d("MainActivity", results)
+                Toast.makeText(this@MainActivity, results, Toast.LENGTH_LONG).show()
+                
+            } catch (e: Exception) {
+                Log.e("MainActivity", "Network test error: ${e.message}", e)
+                Toast.makeText(this@MainActivity, "Network test failed: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+    
+    private fun loadDemoAudiobooks() {
+        audiobooks.clear()
+        
+        // Create demo chapters for book 1
+        val demoChapters1 = listOf(
+            Chapter(
+                chapter = 1,
+                title = "Chapter 1: Introduction",
+                url = "https://demo.audio/ch1.mp3",
+                r2_key = "demo/ch1",
+                duration = 1800
+            ),
+            Chapter(
+                chapter = 2,
+                title = "Chapter 2: Fundamental Techniques",
+                url = "https://demo.audio/ch2.mp3",
+                r2_key = "demo/ch2",
+                duration = 2100
+            ),
+            Chapter(
+                chapter = 3,
+                title = "Chapter 3: Ways to Win People",
+                url = "https://demo.audio/ch3.mp3",
+                r2_key = "demo/ch3",
+                duration = 1950
+            ),
+            Chapter(
+                chapter = 4,
+                title = "Chapter 4: How to Change People",
+                url = "https://demo.audio/ch4.mp3",
+                r2_key = "demo/ch4",
+                duration = 2200
+            )
+        )
+        
+        // Create demo chapters for book 2
+        val demoChapters2 = listOf(
+            Chapter(
+                chapter = 1,
+                title = "Chapter 1: Start",
+                url = "https://demo.audio/lean-ch1.mp3",
+                r2_key = "demo/lean-ch1",
+                duration = 1500
+            ),
+            Chapter(
+                chapter = 2,
+                title = "Chapter 2: Define",
+                url = "https://demo.audio/lean-ch2.mp3",
+                r2_key = "demo/lean-ch2",
+                duration = 1600
+            ),
+            Chapter(
+                chapter = 3,
+                title = "Chapter 3: Learn",
+                url = "https://demo.audio/lean-ch3.mp3",
+                r2_key = "demo/lean-ch3",
+                duration = 1700
+            ),
+            Chapter(
+                chapter = 4,
+                title = "Chapter 4: Experiment",
+                url = "https://demo.audio/lean-ch4.mp3",
+                r2_key = "demo/lean-ch4",
+                duration = 1800
+            )
+        )
+        
+        // Create demo audiobooks with correct constructor parameters
+        val demoBook1 = Audiobook(
+            id = "demo-how-to-win-friends",
+            title = "How To Win Friends and Influence People",
+            author = "Dale Carnegie",
+            chapters = 4,
+            created_at = "2025-08-13T09:00:00.000000",
+            download_url = "/api/demo/how-to-win-friends",
+            isDownloaded = false,
+            localPath = null,
+            chaptersList = demoChapters1
+        )
+        
+        val demoBook2 = Audiobook(
+            id = "demo-lean-startup",
+            title = "The Lean Startup",
+            author = "Eric Ries",
+            chapters = 24,
+            created_at = "2025-08-13T09:00:00.000000",
+            download_url = "/api/demo/lean-startup",
+            isDownloaded = false,
+            localPath = null,
+            chaptersList = demoChapters2
+        )
+        
+        audiobooks.add(demoBook1)
+        audiobooks.add(demoBook2)
+        
+        // Check if any demo books exist locally
+        audiobooks.forEach { audiobook ->
+            audiobook.isDownloaded = fileManager.isAudiobookDownloaded(audiobook.id)
+            if (audiobook.isDownloaded) {
+                audiobook.localPath = fileManager.getAudiobookPath(audiobook.id)
+            }
+        }
+        
+        audiobookAdapter.updateAudiobooks(audiobooks)
+        updateEmptyState()
+        
+        Log.d("MainActivity", "Loaded ${audiobooks.size} demo audiobooks for presentation")
+    }
+    
     private fun syncAudiobooks(userId: String) {
         lifecycleScope.launch {
             try {
+                // Check network connectivity first
+                if (!isNetworkAvailable()) {
+                    tvSyncStatus.text = "No internet connection available"
+                    Toast.makeText(this@MainActivity, "Please check your internet connection", Toast.LENGTH_LONG).show()
+                    return@launch
+                }
+                
                 // Start monitoring processing status
                 startProcessingStatusMonitoring()
                 
@@ -155,14 +366,48 @@ class MainActivity : AppCompatActivity() {
                 showLoading(true)
                 tvSyncStatus.text = "Syncing audiobooks..."
                 
+                Log.d("MainActivity", "Requesting audiobooks for userId: $userId")
+                Log.d("MainActivity", "Network available: ${isNetworkAvailable()}")
+                Log.d("MainActivity", "API URL: ${ApiConfig.BASE_URL}api/audiobooks/$userId")
+                
                 val response = withTimeoutOrNull(30000) {
-                    ApiConfig.apiService.getUserAudiobooks(userId)
+                    Log.d("MainActivity", "Starting API call...")
+                    try {
+                        val result = ApiConfig.apiService.getUserAudiobooks(userId)
+                        Log.d("MainActivity", "API call completed successfully")
+                        result
+                    } catch (e: Exception) {
+                        Log.e("MainActivity", "Primary API call failed: ${e.message}", e)
+                        Log.d("MainActivity", "Attempting fallback with direct IP...")
+                        try {
+                            val fallbackResult = ApiConfig.fallbackApiService.getUserAudiobooks(userId)
+                            Log.d("MainActivity", "Fallback API call completed successfully")
+                            fallbackResult
+                        } catch (fallbackException: Exception) {
+                            Log.e("MainActivity", "Fallback API call also failed: ${fallbackException.message}", fallbackException)
+                            throw e // Throw original exception
+                        }
+                    }
                 }
                 
                 if (response?.isSuccessful == true && response.body() != null) {
                     val audiobookResponse = response.body()!!
+                    Log.d("MainActivity", "API Response: ${audiobookResponse.total} audiobooks found")
                     audiobooks.clear()
-                    audiobooks.addAll(audiobookResponse.audiobooks)
+                    
+                    // Remove duplicates by title - keep the most recent one
+                    val uniqueAudiobooks = audiobookResponse.audiobooks
+                        .groupBy { it.title.trim().lowercase() }
+                        .mapValues { (_, books) ->
+                            // Keep the most recent book (newest created_at)
+                            books.maxByOrNull { it.created_at }
+                        }
+                        .values
+                        .filterNotNull()
+                        .sortedBy { it.title }
+                    
+                    audiobooks.addAll(uniqueAudiobooks)
+                    Log.d("MainActivity", "After removing duplicates: ${audiobooks.size} unique audiobooks")
                     
                     // Check which audiobooks are already downloaded
                     audiobooks.forEach { audiobook ->
@@ -183,13 +428,31 @@ class MainActivity : AppCompatActivity() {
                     
                 } else {
                     val errorMsg = response?.message() ?: "Connection timeout"
-                    tvSyncStatus.text = "Sync failed: $errorMsg"
-                    Toast.makeText(this@MainActivity, "Failed to sync audiobooks", Toast.LENGTH_SHORT).show()
+                    val statusCode = response?.code() ?: -1
+                    Log.e("MainActivity", "API Error: $statusCode - $errorMsg")
+                    
+                    // For presentation - load demo audiobooks if sync fails
+                    loadDemoAudiobooks()
+                    
+                    tvSyncStatus.text = "Using offline demo audiobooks for presentation"
+                    Toast.makeText(this@MainActivity, "Demo mode: showing sample audiobooks", Toast.LENGTH_SHORT).show()
                 }
                 
             } catch (e: Exception) {
-                tvSyncStatus.text = "Sync error: ${e.message}"
-                Toast.makeText(this@MainActivity, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                Log.e("MainActivity", "Sync exception: ${e.message}", e)
+                
+                // For presentation - load demo audiobooks if sync fails
+                loadDemoAudiobooks()
+                
+                val errorMessage = when {
+                    e.message?.contains("Unable to resolve host") == true -> 
+                        "Demo mode: Network unavailable, showing sample audiobooks"
+                    e.message?.contains("timeout") == true -> 
+                        "Demo mode: Server timeout, showing sample audiobooks"
+                    else -> "Demo mode: Sync failed, showing sample audiobooks"
+                }
+                tvSyncStatus.text = errorMessage
+                Toast.makeText(this@MainActivity, errorMessage, Toast.LENGTH_LONG).show()
             } finally {
                 showLoading(false)
             }
@@ -240,8 +503,78 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun deleteAudiobookFromServer(audiobook: Audiobook) {
+        lifecycleScope.launch {
+            try {
+                val userId = currentUserId ?: return@launch
+                
+                // Show confirmation dialog
+                val confirmed = showDeleteConfirmationDialog(audiobook.title)
+                if (!confirmed) return@launch
+                
+                Toast.makeText(this@MainActivity, "Deleting ${audiobook.title} from server...", Toast.LENGTH_SHORT).show()
+                
+                val response = ApiConfig.apiService.deleteAudiobook(userId, audiobook.id)
+                
+                if (response.isSuccessful) {
+                    // Remove from local list
+                    audiobooks.remove(audiobook)
+                    audiobookAdapter.updateAudiobooks(audiobooks)
+                    updateEmptyState()
+                    
+                    // Also delete local files if they exist
+                    if (audiobook.isDownloaded) {
+                        fileManager.deleteAudiobook(audiobook.id)
+                    }
+                    
+                    Toast.makeText(this@MainActivity, "Deleted ${audiobook.title} from server", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(this@MainActivity, "Failed to delete from server: ${response.message()}", Toast.LENGTH_SHORT).show()
+                }
+                
+            } catch (e: Exception) {
+                Toast.makeText(this@MainActivity, "Delete error: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+    
+    private suspend fun showDeleteConfirmationDialog(bookTitle: String): Boolean {
+        return withContext(Dispatchers.Main) {
+            var result = false
+            val dialog = androidx.appcompat.app.AlertDialog.Builder(this@MainActivity)
+                .setTitle("Delete Audiobook")
+                .setMessage("Are you sure you want to delete \"$bookTitle\" from the server? This will permanently remove it from all devices.")
+                .setPositiveButton("Delete") { _, _ -> result = true }
+                .setNegativeButton("Cancel") { _, _ -> result = false }
+                .setCancelable(false)
+                .create()
+            
+            dialog.show()
+            
+            // Wait for user response
+            suspendCancellableCoroutine { continuation ->
+                dialog.setOnDismissListener {
+                    if (continuation.isActive) {
+                        continuation.resume(result, null)
+                    }
+                }
+                continuation.invokeOnCancellation { dialog.dismiss() }
+            }
+        }
+    }
+
     private fun openPlayer(audiobook: Audiobook) {
-        // Load chapter details for streaming before opening player
+        // Check if this is a demo audiobook
+        if (audiobook.id.startsWith("demo-")) {
+            // Demo audiobooks already have chapter details
+            Toast.makeText(this@MainActivity, "Opening demo audiobook: ${audiobook.title}", Toast.LENGTH_SHORT).show()
+            val intent = Intent(this@MainActivity, PlayerActivity::class.java)
+            intent.putExtra("audiobook", audiobook)
+            startActivity(intent)
+            return
+        }
+        
+        // Load chapter details for streaming before opening player (real audiobooks)
         lifecycleScope.launch {
             try {
                 val response = ApiConfig.apiService.getAudiobookDetails(audiobook.id)
