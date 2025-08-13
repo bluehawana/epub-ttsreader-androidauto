@@ -108,6 +108,9 @@ class MainActivity : AppCompatActivity() {
             },
             onDeleteFromServerClick = { audiobook ->
                 deleteAudiobookFromServer(audiobook)
+            },
+            onDeleteDuplicatesClick = { audiobook ->
+                deleteAllCopiesOfBook(audiobook)
             }
         )
         
@@ -541,13 +544,108 @@ class MainActivity : AppCompatActivity() {
         }
     }
     
+    private fun deleteAllCopiesOfBook(audiobook: Audiobook) {
+        lifecycleScope.launch {
+            try {
+                val userId = currentUserId ?: return@launch
+                
+                // Find all copies with the same title
+                val duplicates = audiobooks.filter { it.title.trim().lowercase() == audiobook.title.trim().lowercase() }
+                
+                if (duplicates.size <= 1) {
+                    Toast.makeText(this@MainActivity, "Only one copy exists. Use 'Delete from Cloud' if you want to permanently remove it.", Toast.LENGTH_LONG).show()
+                    return@launch
+                }
+                
+                // Show confirmation dialog
+                val confirmed = showDeleteDuplicatesConfirmationDialog(audiobook.title, duplicates.size)
+                if (!confirmed) return@launch
+                
+                Toast.makeText(this@MainActivity, "Deleting all ${duplicates.size} copies of ${audiobook.title}...", Toast.LENGTH_SHORT).show()
+                
+                val deletedIndices = mutableListOf<Int>()
+                var deletedCount = 0
+                
+                for (duplicate in duplicates) {
+                    Log.d("MainActivity", "Deleting duplicate: ${duplicate.id}")
+                    val response = ApiConfig.apiService.deleteAudiobook(userId, duplicate.id)
+                    
+                    if (response.isSuccessful) {
+                        val index = audiobooks.indexOf(duplicate)
+                        if (index != -1) {
+                            deletedIndices.add(index)
+                            
+                            // Also delete local files if they exist
+                            if (duplicate.isDownloaded) {
+                                fileManager.deleteAudiobook(duplicate.id)
+                            }
+                            deletedCount++
+                        }
+                    }
+                }
+                
+                withContext(Dispatchers.Main) {
+                    // Remove items in reverse order to maintain indices
+                    deletedIndices.sortedDescending().forEach { index ->
+                        audiobooks.removeAt(index)
+                        audiobookAdapter.notifyItemRemoved(index)
+                    }
+                    updateEmptyState()
+                    
+                    Toast.makeText(this@MainActivity, "Deleted $deletedCount copies of ${audiobook.title}", Toast.LENGTH_SHORT).show()
+                }
+                
+            } catch (e: Exception) {
+                Toast.makeText(this@MainActivity, "Delete duplicates error: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+    
+    private suspend fun showDeleteDuplicatesConfirmationDialog(bookTitle: String, count: Int): Boolean {
+        return withContext(Dispatchers.Main) {
+            suspendCancellableCoroutine<Boolean> { continuation ->
+                val dialog = androidx.appcompat.app.AlertDialog.Builder(this@MainActivity)
+                    .setTitle("Delete All Copies")
+                    .setMessage("This will delete ALL $count copies of \"$bookTitle\" from the cloud server.\n\n" +
+                               "⚠️ This will permanently remove:\n" +
+                               "• All $count versions from the cloud\n" +
+                               "• All local downloads of this book\n\n" +
+                               "This is useful for cleaning up duplicates when you have multiple copies of the same book.")
+                    .setPositiveButton("Delete All $count Copies") { _, _ -> 
+                        if (continuation.isActive) {
+                            continuation.resume(true, null)
+                        }
+                    }
+                    .setNegativeButton("Cancel") { _, _ -> 
+                        if (continuation.isActive) {
+                            continuation.resume(false, null)
+                        }
+                    }
+                    .setCancelable(true)
+                    .setOnCancelListener {
+                        if (continuation.isActive) {
+                            continuation.resume(false, null)
+                        }
+                    }
+                    .create()
+                
+                continuation.invokeOnCancellation { dialog.dismiss() }
+                dialog.show()
+            }
+        }
+    }
+    
     private suspend fun showDeleteConfirmationDialog(bookTitle: String): Boolean {
         return withContext(Dispatchers.Main) {
             suspendCancellableCoroutine<Boolean> { continuation ->
                 val dialog = androidx.appcompat.app.AlertDialog.Builder(this@MainActivity)
-                    .setTitle("Delete Audiobook")
-                    .setMessage("Are you sure you want to delete \"$bookTitle\" from the server? This will permanently remove it from all devices.")
-                    .setPositiveButton("Delete") { _, _ -> 
+                    .setTitle("⚠️ Permanent Cloud Deletion")
+                    .setMessage("This will PERMANENTLY DELETE \"$bookTitle\" from the cloud server.\n\n" +
+                               "⚠️ WARNING: This action cannot be undone!\n" +
+                               "• The audiobook will be removed from ALL your devices\n" +
+                               "• You'll need to re-upload the EPUB to recreate it\n\n" +
+                               "💡 TIP: Use 'Delete Local Copy' if you only want to free up device storage.")
+                    .setPositiveButton("PERMANENTLY DELETE") { _, _ -> 
                         if (continuation.isActive) {
                             continuation.resume(true, null)
                         }

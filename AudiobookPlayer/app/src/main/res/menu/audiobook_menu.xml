@@ -13,6 +13,9 @@
         android:id="@+id/menu_delete_server"
         android:title="@string/menu_delete_server" />
     <item
+        android:id="@+id/menu_delete_duplicates"
+        android:title="@string/menu_delete_duplicates" />
+    <item
         android:id="@+id/menu_details"
         android:title="@string/menu_details" />
 </menu>

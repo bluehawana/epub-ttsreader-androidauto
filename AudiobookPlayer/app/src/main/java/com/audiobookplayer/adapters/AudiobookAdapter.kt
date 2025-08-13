@@ -17,7 +17,8 @@ class AudiobookAdapter(
     private val onPlayClick: (Audiobook) -> Unit,
     private val onDownloadClick: (Audiobook) -> Unit,
     private val onDeleteClick: (Audiobook) -> Unit,
-    private val onDeleteFromServerClick: (Audiobook) -> Unit
+    private val onDeleteFromServerClick: (Audiobook) -> Unit,
+    private val onDeleteDuplicatesClick: (Audiobook) -> Unit
 ) : RecyclerView.Adapter<AudiobookAdapter.AudiobookViewHolder>() {
 
     fun updateAudiobooks(newAudiobooks: List<Audiobook>) {
@@ -136,6 +137,10 @@ class AudiobookAdapter(
                     }
                     R.id.menu_delete_server -> {
                         onDeleteFromServerClick(audiobook)
+                        true
+                    }
+                    R.id.menu_delete_duplicates -> {
+                        onDeleteDuplicatesClick(audiobook)
                         true
                     }
                     R.id.menu_details -> {

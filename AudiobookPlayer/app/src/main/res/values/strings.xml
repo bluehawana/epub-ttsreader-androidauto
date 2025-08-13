@@ -24,8 +24,9 @@
     <!-- Menu Items -->
     <string name="menu_play">Play</string>
     <string name="menu_download">Download</string>
-    <string name="menu_delete_local">Delete Local Files</string>
-    <string name="menu_delete_server">Delete from Server</string>
+    <string name="menu_delete_local">Delete Local Copy</string>
+    <string name="menu_delete_server">⚠️ Delete from Cloud (Permanent)</string>
+    <string name="menu_delete_duplicates">Delete All Copies of This Book</string>
     <string name="menu_details">Details</string>
     
     <!-- Messages -->
