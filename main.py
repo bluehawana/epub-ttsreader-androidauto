@@ -416,11 +416,10 @@ async def process_epub_async(job_id: str, user_id: str, book_title: str, epub_da
             with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as tmp_file:
                 mp3_path = tmp_file.name
             
-            # Convert to speech
+            # Convert to speech with automatic language detection
             success = await tts_service.text_to_speech(
                 chapter['text'], 
-                mp3_path,
-                voice_name="en-US-AriaNeural"
+                mp3_path
             )
             
             if success:
@@ -504,7 +503,7 @@ def extract_chapters_from_epub(epub_data: str) -> list:
                 if text and len(text) > 100:
                     chapters.append({
                         'title': item.get_name() or f"Chapter {len(chapters) + 1}",
-                        'text': text[:10000]  # Limit for demo
+                        'text': text  # Full text for production audiobooks
                     })
         
         return chapters
