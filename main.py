@@ -40,9 +40,18 @@ async def initialize_tts():
     tts_backend = await tts_service.initialize()
     logger.info(f"TTS initialized with backend: {tts_backend}")
 
-# Run TTS initialization
-import asyncio
-asyncio.create_task(initialize_tts())
+# Run TTS initialization in thread to avoid event loop issues
+def init_tts_sync():
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(initialize_tts())
+    loop.close()
+
+# Initialize TTS in background thread
+import threading
+tts_init_thread = threading.Thread(target=init_tts_sync)
+tts_init_thread.daemon = True
+tts_init_thread.start()
 
 # Cloudflare R2 storage
 def get_r2_client():
