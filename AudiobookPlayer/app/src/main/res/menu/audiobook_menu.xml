@@ -10,6 +10,9 @@
         android:id="@+id/menu_delete_local"
         android:title="@string/menu_delete_local" />
     <item
+        android:id="@+id/menu_delete_server"
+        android:title="@string/menu_delete_server" />
+    <item
         android:id="@+id/menu_details"
         android:title="@string/menu_details" />
 </menu>

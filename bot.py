@@ -193,58 +193,70 @@ class EpubAudiobookBot:
     async def handle_epub(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle EPUB file uploads"""
         document: Document = update.message.document
-        user_id = update.effective_user.id
+        user_id = str(update.effective_user.id)
         user_name = update.effective_user.first_name
         
         # Send processing message
         processing_msg = await update.message.reply_text(
-            "📖 Processing your EPUB file...\nThis may take a few minutes!"
+            "📖 Processing your EPUB file...\n⏳ Sending to cloud service for processing..."
         )
         
         try:
-            # Download EPUB file
+            # Download EPUB file and convert to base64
             epub_path = await self.download_epub(document)
             book_title = document.file_name.replace('.epub', '')
             
-            # Extract text from EPUB
-            await processing_msg.edit_text("📝 Extracting text from EPUB...")
-            chapters = await self.extract_epub_text(epub_path)
+            # Convert EPUB to base64 for API
+            import base64
+            with open(epub_path, 'rb') as f:
+                epub_data = base64.b64encode(f.read()).decode('utf-8')
             
-            if not chapters:
-                await processing_msg.edit_text("❌ Could not extract text from EPUB file")
-                return
+            # Send to cloud service for processing
+            await processing_msg.edit_text("☁️ Sending EPUB to cloud service for TTS conversion...")
             
-            # Convert to audio
-            await processing_msg.edit_text(f"🎙️ Converting {len(chapters)} chapters to audio...")
-            audio_files = await self.convert_to_audio(chapters)
-            
-            # Add to podcast feed
-            await processing_msg.edit_text("📡 Adding to your podcast feed...")
-            self.podcast_gen.add_audiobook_episode(
-                user_id, 
-                book_title, 
-                audio_files,
-                {'author': 'Unknown', 'file_name': document.file_name}
-            )
-            
-            # Send audio files
-            await processing_msg.edit_text("📤 Sending audiobook files...")
-            await self.send_audio_files(update, audio_files)
-            
-            # Final success message with podcast info
-            feed_url = self.podcast_gen.get_feed_url(user_id)
-            success_message = (
-                f"✅ Audiobook conversion complete!\n\n"
-                f"📚 Book: {book_title}\n"
-                f"🎧 Chapters: {len(audio_files)}\n\n"
-                f"🎙️ Added to your podcast: {feed_url}\n\n"
-                f"Use /podcast to get your feed URL anytime!"
-            )
-            await processing_msg.edit_text(success_message)
+            import aiohttp
+            async with aiohttp.ClientSession() as session:
+                payload = {
+                    'user_id': user_id,
+                    'book_title': book_title,
+                    'epub_data': epub_data
+                }
+                
+                async with session.post(
+                    'https://epub-audiobook-service-ab00bb696e09.herokuapp.com/api/process-epub',
+                    json=payload,
+                    timeout=aiohttp.ClientTimeout(total=30)
+                ) as response:
+                    
+                    if response.status == 200:
+                        result = await response.json()
+                        job_id = result.get('job_id')
+                        
+                        await processing_msg.edit_text(
+                            f"✅ EPUB sent to cloud service!\n\n"
+                            f"📚 Book: {book_title}\n"
+                            f"🆔 Job ID: {job_id}\n"
+                            f"⏱️ Processing time: {result.get('estimated_time', '5-10 minutes')}\n\n"
+                            f"🎧 Waiting for audiobook processing to complete..."
+                        )
+                        
+                        # Poll job status until completion
+                        await self.wait_for_job_completion(session, job_id, processing_msg, update, book_title)
+                        
+                    else:
+                        error_text = await response.text()
+                        await processing_msg.edit_text(
+                            f"❌ Failed to process EPUB\n"
+                            f"Error: {error_text}\n\n"
+                            f"Please try again later."
+                        )
             
         except Exception as e:
             logger.error(f"Error processing EPUB: {e}")
-            await processing_msg.edit_text(f"❌ Error processing file: {str(e)}")
+            await processing_msg.edit_text(
+                f"❌ Error processing file: {str(e)}\n\n"
+                f"Please try again later or contact support."
+            )
         finally:
             # Cleanup temp files
             await self.cleanup_temp_files()
@@ -255,6 +267,169 @@ class EpubAudiobookBot:
         epub_path = self.temp_dir / f"{document.file_name}"
         await file.download_to_drive(epub_path)
         return epub_path
+    
+    async def wait_for_job_completion(self, session, job_id: str, processing_msg, update: Update, book_title: str):
+        """Poll job status until completion and send files to user"""
+        import asyncio
+        
+        max_polls = 180  # Max 30 minutes (180 polls * 10 seconds)
+        poll_count = 0
+        
+        while poll_count < max_polls:
+            try:
+                # Check job status
+                async with session.get(
+                    f'https://epub-audiobook-service-ab00bb696e09.herokuapp.com/api/job-status/{job_id}',
+                    timeout=aiohttp.ClientTimeout(total=10)
+                ) as status_response:
+                    
+                    if status_response.status == 200:
+                        job_status = await status_response.json()
+                        status = job_status.get('status', 'unknown')
+                        progress = job_status.get('progress', 0)
+                        message = job_status.get('message', 'Processing...')
+                        
+                        # Update progress message
+                        await processing_msg.edit_text(
+                            f"🔄 Processing: {book_title}\n\n"
+                            f"📊 Progress: {progress}%\n"
+                            f"💬 Status: {message}\n\n"
+                            f"⏳ Please wait, this may take several minutes..."
+                        )
+                        
+                        if status == 'completed':
+                            # Job is done, get the audiobook files
+                            await processing_msg.edit_text(
+                                f"✅ Processing complete!\n\n"
+                                f"📚 Book: {book_title}\n"
+                                f"🎧 Retrieving audiobook files..."
+                            )
+                            
+                            # Get audiobook download info
+                            await self.retrieve_and_send_audiobook(session, job_id, processing_msg, update, book_title)
+                            return
+                            
+                        elif status == 'failed':
+                            await processing_msg.edit_text(
+                                f"❌ Processing failed\n\n"
+                                f"📚 Book: {book_title}\n"
+                                f"💬 Error: {message}\n\n"
+                                f"Please try again later."
+                            )
+                            return
+                            
+                        elif status == 'not_found':
+                            await processing_msg.edit_text(
+                                f"⚠️ Job not found\n\n"
+                                f"📚 Book: {book_title}\n"
+                                f"🆔 Job ID: {job_id}\n\n"
+                                f"The processing job may have expired. Please try uploading the EPUB again."
+                            )
+                            return
+                
+                # Wait before next poll
+                await asyncio.sleep(10)
+                poll_count += 1
+                
+            except Exception as e:
+                logger.error(f"Error polling job status: {e}")
+                await asyncio.sleep(10)
+                poll_count += 1
+        
+        # Timeout reached
+        await processing_msg.edit_text(
+            f"⏰ Processing timeout\n\n"
+            f"📚 Book: {book_title}\n"
+            f"🆔 Job ID: {job_id}\n\n"
+            f"Processing is taking longer than expected. Your audiobook may still be processing in the background.\n"
+            f"Please check your Android Auto app later or try again."
+        )
+    
+    async def retrieve_and_send_audiobook(self, session, job_id: str, processing_msg, update: Update, book_title: str):
+        """Retrieve processed audiobook from backend and send files to user"""
+        try:
+            # Get audiobook download URLs from backend
+            async with session.get(
+                f'https://epub-audiobook-service-ab00bb696e09.herokuapp.com/api/download/{job_id}',
+                timeout=aiohttp.ClientTimeout(total=30)
+            ) as download_response:
+                
+                if download_response.status == 200:
+                    audiobook_data = await download_response.json()
+                    chapters = audiobook_data.get('chapters', [])
+                    
+                    await processing_msg.edit_text(
+                        f"🎵 Sending audiobook files...\n\n"
+                        f"📚 Book: {book_title}\n"
+                        f"📖 Chapters: {len(chapters)}\n\n"
+                        f"⬇️ Downloading files from cloud storage..."
+                    )
+                    
+                    # Download and send each chapter
+                    for i, chapter in enumerate(chapters):
+                        try:
+                            chapter_url = chapter.get('url')
+                            chapter_title = chapter.get('title', f"Chapter {chapter.get('chapter', i+1)}")
+                            
+                            if chapter_url:
+                                # Download chapter MP3 from backend
+                                async with session.get(chapter_url, timeout=aiohttp.ClientTimeout(total=60)) as audio_response:
+                                    if audio_response.status == 200:
+                                        audio_data = await audio_response.read()
+                                        
+                                        # Send as audio file to user
+                                        from io import BytesIO
+                                        audio_file = BytesIO(audio_data)
+                                        audio_file.name = f"chapter_{i+1}.mp3"
+                                        
+                                        await update.message.reply_audio(
+                                            audio=audio_file,
+                                            title=chapter_title,
+                                            filename=f"chapter_{i+1}.mp3"
+                                        )
+                                        
+                                        logger.info(f"Sent chapter {i+1} to user")
+                                        
+                                        # Update progress
+                                        await processing_msg.edit_text(
+                                            f"📤 Sending files... ({i+1}/{len(chapters)})\n\n"
+                                            f"📚 Book: {book_title}\n"
+                                            f"📖 Current: {chapter_title}"
+                                        )
+                                        
+                                        # Small delay between sends
+                                        await asyncio.sleep(1)
+                                    else:
+                                        logger.error(f"Failed to download chapter {i+1}: HTTP {audio_response.status}")
+                            
+                        except Exception as chapter_error:
+                            logger.error(f"Error sending chapter {i+1}: {chapter_error}")
+                    
+                    # Final success message
+                    await processing_msg.edit_text(
+                        f"✅ Audiobook sent successfully!\n\n"
+                        f"📚 Book: {book_title}\n"
+                        f"🎧 Chapters sent: {len(chapters)}\n\n"
+                        f"🎵 Your audiobook files are now available!\n"
+                        f"📱 Use /podcast to get your podcast feed for easy listening."
+                    )
+                    
+                else:
+                    await processing_msg.edit_text(
+                        f"❌ Failed to retrieve audiobook\n\n"
+                        f"📚 Book: {book_title}\n"
+                        f"🆔 Job ID: {job_id}\n\n"
+                        f"The audiobook may still be processing. Please try again later."
+                    )
+                    
+        except Exception as e:
+            logger.error(f"Error retrieving audiobook: {e}")
+            await processing_msg.edit_text(
+                f"❌ Error retrieving audiobook\n\n"
+                f"📚 Book: {book_title}\n"
+                f"💬 Error: {str(e)}\n\n"
+                f"Please try again later."
+            )
     
     async def extract_epub_text(self, epub_path: Path) -> list:
         """Extract text content from EPUB file"""

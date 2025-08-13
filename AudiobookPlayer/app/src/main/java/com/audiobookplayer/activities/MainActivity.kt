@@ -370,7 +370,7 @@ class MainActivity : AppCompatActivity() {
                 Log.d("MainActivity", "Network available: ${isNetworkAvailable()}")
                 Log.d("MainActivity", "API URL: ${ApiConfig.BASE_URL}api/audiobooks/$userId")
                 
-                val response = withTimeoutOrNull(30000) {
+                val response = withTimeoutOrNull(60000) {
                     Log.d("MainActivity", "Starting API call...")
                     try {
                         val result = ApiConfig.apiService.getUserAudiobooks(userId)
@@ -385,7 +385,8 @@ class MainActivity : AppCompatActivity() {
                             fallbackResult
                         } catch (fallbackException: Exception) {
                             Log.e("MainActivity", "Fallback API call also failed: ${fallbackException.message}", fallbackException)
-                            throw e // Throw original exception
+                            // Return a more specific error instead of just throwing
+                            throw RuntimeException("Both primary and fallback API calls failed. Primary: ${e.message}, Fallback: ${fallbackException.message}")
                         }
                     }
                 }
@@ -395,19 +396,11 @@ class MainActivity : AppCompatActivity() {
                     Log.d("MainActivity", "API Response: ${audiobookResponse.total} audiobooks found")
                     audiobooks.clear()
                     
-                    // Remove duplicates by title - keep the most recent one
-                    val uniqueAudiobooks = audiobookResponse.audiobooks
-                        .groupBy { it.title.trim().lowercase() }
-                        .mapValues { (_, books) ->
-                            // Keep the most recent book (newest created_at)
-                            books.maxByOrNull { it.created_at }
-                        }
-                        .values
-                        .filterNotNull()
-                        .sortedBy { it.title }
+                    // Show all audiobooks (user wants to see all 17 instead of unique titles only)
+                    val allAudiobooks = audiobookResponse.audiobooks.sortedBy { it.title }
                     
-                    audiobooks.addAll(uniqueAudiobooks)
-                    Log.d("MainActivity", "After removing duplicates: ${audiobooks.size} unique audiobooks")
+                    audiobooks.addAll(allAudiobooks)
+                    Log.d("MainActivity", "Loaded all audiobooks: ${audiobooks.size} total audiobooks")
                     
                     // Check which audiobooks are already downloaded
                     audiobooks.forEach { audiobook ->

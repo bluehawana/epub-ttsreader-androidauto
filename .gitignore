@@ -51,4 +51,8 @@ htmlcov/
 # OS
 .DS_Store
 Thumbs.db
-*.lnkAudiobookPlayer/app/google-services.json
+*.lnk
+
+# Firebase & Google Services
+AudiobookPlayer/app/google-services.json
+google-services.json
