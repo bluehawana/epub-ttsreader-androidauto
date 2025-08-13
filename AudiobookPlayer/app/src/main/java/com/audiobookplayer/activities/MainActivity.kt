@@ -506,8 +506,10 @@ class MainActivity : AppCompatActivity() {
                 if (!confirmed) return@launch
                 
                 Toast.makeText(this@MainActivity, "Deleting ${audiobook.title} from server...", Toast.LENGTH_SHORT).show()
+                Log.d("MainActivity", "Attempting to delete audiobook: ${audiobook.id} for user: $userId")
                 
                 val response = ApiConfig.apiService.deleteAudiobook(userId, audiobook.id)
+                Log.d("MainActivity", "Delete response: ${response.code()} - ${response.message()}")
                 
                 if (response.isSuccessful) {
                     // Remove from local list
@@ -533,25 +535,30 @@ class MainActivity : AppCompatActivity() {
     
     private suspend fun showDeleteConfirmationDialog(bookTitle: String): Boolean {
         return withContext(Dispatchers.Main) {
-            var result = false
-            val dialog = androidx.appcompat.app.AlertDialog.Builder(this@MainActivity)
-                .setTitle("Delete Audiobook")
-                .setMessage("Are you sure you want to delete \"$bookTitle\" from the server? This will permanently remove it from all devices.")
-                .setPositiveButton("Delete") { _, _ -> result = true }
-                .setNegativeButton("Cancel") { _, _ -> result = false }
-                .setCancelable(false)
-                .create()
-            
-            dialog.show()
-            
-            // Wait for user response
-            suspendCancellableCoroutine { continuation ->
-                dialog.setOnDismissListener {
-                    if (continuation.isActive) {
-                        continuation.resume(result, null)
+            suspendCancellableCoroutine<Boolean> { continuation ->
+                val dialog = androidx.appcompat.app.AlertDialog.Builder(this@MainActivity)
+                    .setTitle("Delete Audiobook")
+                    .setMessage("Are you sure you want to delete \"$bookTitle\" from the server? This will permanently remove it from all devices.")
+                    .setPositiveButton("Delete") { _, _ -> 
+                        if (continuation.isActive) {
+                            continuation.resume(true, null)
+                        }
                     }
-                }
+                    .setNegativeButton("Cancel") { _, _ -> 
+                        if (continuation.isActive) {
+                            continuation.resume(false, null)
+                        }
+                    }
+                    .setCancelable(true)
+                    .setOnCancelListener {
+                        if (continuation.isActive) {
+                            continuation.resume(false, null)
+                        }
+                    }
+                    .create()
+                
                 continuation.invokeOnCancellation { dialog.dismiss() }
+                dialog.show()
             }
         }
     }
