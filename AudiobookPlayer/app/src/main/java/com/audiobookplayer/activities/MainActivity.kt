@@ -512,19 +512,27 @@ class MainActivity : AppCompatActivity() {
                 Log.d("MainActivity", "Delete response: ${response.code()} - ${response.message()}")
                 
                 if (response.isSuccessful) {
-                    // Remove from local list
-                    audiobooks.remove(audiobook)
-                    audiobookAdapter.updateAudiobooks(audiobooks)
-                    updateEmptyState()
-                    
-                    // Also delete local files if they exist
-                    if (audiobook.isDownloaded) {
-                        fileManager.deleteAudiobook(audiobook.id)
+                    withContext(Dispatchers.Main) {
+                        // Remove from local list and update UI immediately
+                        val index = audiobooks.indexOf(audiobook)
+                        if (index != -1) {
+                            audiobooks.removeAt(index)
+                            audiobookAdapter.notifyItemRemoved(index)
+                            updateEmptyState()
+                            Log.d("MainActivity", "Removed audiobook at index $index from UI")
+                        }
+                        
+                        // Also delete local files if they exist
+                        if (audiobook.isDownloaded) {
+                            fileManager.deleteAudiobook(audiobook.id)
+                        }
+                        
+                        Toast.makeText(this@MainActivity, "Deleted ${audiobook.title} from server", Toast.LENGTH_SHORT).show()
                     }
-                    
-                    Toast.makeText(this@MainActivity, "Deleted ${audiobook.title} from server", Toast.LENGTH_SHORT).show()
                 } else {
-                    Toast.makeText(this@MainActivity, "Failed to delete from server: ${response.message()}", Toast.LENGTH_SHORT).show()
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(this@MainActivity, "Failed to delete from server: ${response.message()}", Toast.LENGTH_SHORT).show()
+                    }
                 }
                 
             } catch (e: Exception) {
