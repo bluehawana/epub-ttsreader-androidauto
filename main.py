@@ -20,6 +20,7 @@ from io import BytesIO
 
 # Import our services
 from edge_tts_service import EdgeTTSService
+from coqui_tts_service import AdvancedTTSService
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -29,8 +30,19 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 CORS(app)
 
-# Initialize services
-tts_service = EdgeTTSService()
+# Initialize advanced TTS service (Coqui + EdgeTTS fallback)
+tts_service = AdvancedTTSService()
+tts_backend = "initializing"
+
+# Initialize TTS on startup
+async def initialize_tts():
+    global tts_backend
+    tts_backend = await tts_service.initialize()
+    logger.info(f"TTS initialized with backend: {tts_backend}")
+
+# Run TTS initialization
+import asyncio
+asyncio.create_task(initialize_tts())
 
 # Cloudflare R2 storage
 def get_r2_client():
@@ -76,13 +88,21 @@ def health():
     r2, bucket = get_r2_client()
     storage_status = 'connected' if r2 else 'not_configured'
     
+    # Get TTS backend info
+    tts_info = tts_service.get_backend_info() if hasattr(tts_service, 'get_backend_info') else {
+        'backend': tts_backend,
+        'quality': 'high' if tts_backend == 'coqui' else 'standard'
+    }
+    
     return jsonify({
         'status': 'healthy',
         'service': 'epub-audiobook-cloud',
-        'tts': 'edge',
+        'tts_backend': tts_info['backend'],
+        'tts_quality': tts_info['quality'],
         'storage': f'cloudflare_r2_{storage_status}',
         'r2_scanner': 'active',
         'processed_epubs': len(processed_epubs),
+        'features': tts_info.get('features', {}),
         'timestamp': datetime.now().isoformat()
     })
 
@@ -566,6 +586,41 @@ def get_audiobooks(user_id):
     except Exception as e:
         logger.error(f"Get audiobooks failed: {e}")
         return jsonify({'audiobooks': [], 'total': 0})
+
+@app.route('/api/audiobooks/<user_id>/<audiobook_id>', methods=['DELETE'])
+def delete_audiobook(user_id, audiobook_id):
+    """Delete audiobook from R2 storage"""
+    try:
+        r2, bucket_name = get_r2_client()
+        if not r2 or not bucket_name:
+            return jsonify({'error': 'Storage not available'}), 500
+        
+        # List all objects for this audiobook
+        prefix = f"{user_id}/{audiobook_id}/"
+        response = r2.list_objects_v2(Bucket=bucket_name, Prefix=prefix)
+        
+        deleted_files = []
+        for obj in response.get('Contents', []):
+            key = obj['Key']
+            try:
+                r2.delete_object(Bucket=bucket_name, Key=key)
+                deleted_files.append(key)
+                logger.info(f"Deleted file from R2: {key}")
+            except Exception as e:
+                logger.error(f"Failed to delete {key}: {e}")
+        
+        if deleted_files:
+            return jsonify({
+                'message': f'Deleted audiobook {audiobook_id}',
+                'deleted_files': deleted_files,
+                'total_deleted': len(deleted_files)
+            })
+        else:
+            return jsonify({'error': 'Audiobook not found'}), 404
+        
+    except Exception as e:
+        logger.error(f"Delete audiobook error: {e}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/download/<audiobook_id>')
 def download_audiobook(audiobook_id):
