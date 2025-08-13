@@ -11,6 +11,3 @@ gunicorn>=21.0.0
 boto3>=1.34.0
 python-dotenv>=1.0.0
 pydub>=0.25.0
-# High-quality TTS with human-like voices
-coqui-tts>=0.22.0
-torch>=2.0.0

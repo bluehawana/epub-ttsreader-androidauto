@@ -18,22 +18,14 @@ class CoquiTTSService:
         self.initialized = False
         
     def _install_coqui_tts(self):
-        """Install Coqui TTS if not available"""
+        """Check if Coqui TTS is available (no auto-install for Heroku compatibility)"""
         try:
             import TTS
             logger.info("Coqui TTS already installed")
             return True
         except ImportError:
-            logger.info("Installing Coqui TTS...")
-            try:
-                subprocess.check_call([
-                    sys.executable, "-m", "pip", "install", "coqui-tts"
-                ])
-                logger.info("Coqui TTS installed successfully")
-                return True
-            except subprocess.CalledProcessError as e:
-                logger.error(f"Failed to install Coqui TTS: {e}")
-                return False
+            logger.info("Coqui TTS not available - using EdgeTTS fallback")
+            return False
     
     def initialize(self) -> bool:
         """Initialize the Coqui TTS model"""
