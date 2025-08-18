@@ -44,7 +44,6 @@ interface AudiobookApiService {
 
 object ApiConfig {
     const val BASE_URL = "https://epub-audiobook-service-ab00bb696e09.herokuapp.com/"
-    const val FALLBACK_IP_URL = "https://18.208.60.216/" // Direct IP fallback
     
     // Retrofit instance with timeout configuration
     val retrofit: retrofit2.Retrofit by lazy {
@@ -52,13 +51,6 @@ object ApiConfig {
             .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
             .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
             .writeTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
-            .addInterceptor { chain ->
-                val original = chain.request()
-                val requestBuilder = original.newBuilder()
-                    .header("Host", "epub-audiobook-service-ab00bb696e09.herokuapp.com")
-                val request = requestBuilder.build()
-                chain.proceed(request)
-            }
             .build()
             
         retrofit2.Retrofit.Builder()
@@ -68,33 +60,7 @@ object ApiConfig {
             .build()
     }
     
-    // Fallback retrofit with direct IP
-    val fallbackRetrofit: retrofit2.Retrofit by lazy {
-        val okHttpClient = okhttp3.OkHttpClient.Builder()
-            .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
-            .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
-            .writeTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
-            .addInterceptor { chain ->
-                val original = chain.request()
-                val requestBuilder = original.newBuilder()
-                    .header("Host", "epub-audiobook-service-ab00bb696e09.herokuapp.com")
-                val request = requestBuilder.build()
-                chain.proceed(request)
-            }
-            .build()
-            
-        retrofit2.Retrofit.Builder()
-            .baseUrl(FALLBACK_IP_URL)
-            .client(okHttpClient)
-            .addConverterFactory(retrofit2.converter.gson.GsonConverterFactory.create())
-            .build()
-    }
-    
     val apiService: AudiobookApiService by lazy {
         retrofit.create(AudiobookApiService::class.java)
-    }
-    
-    val fallbackApiService: AudiobookApiService by lazy {
-        fallbackRetrofit.create(AudiobookApiService::class.java)
     }
 }

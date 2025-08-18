@@ -380,17 +380,8 @@ class MainActivity : AppCompatActivity() {
                         Log.d("MainActivity", "API call completed successfully")
                         result
                     } catch (e: Exception) {
-                        Log.e("MainActivity", "Primary API call failed: ${e.message}", e)
-                        Log.d("MainActivity", "Attempting fallback with direct IP...")
-                        try {
-                            val fallbackResult = ApiConfig.fallbackApiService.getUserAudiobooks(userId)
-                            Log.d("MainActivity", "Fallback API call completed successfully")
-                            fallbackResult
-                        } catch (fallbackException: Exception) {
-                            Log.e("MainActivity", "Fallback API call also failed: ${fallbackException.message}", fallbackException)
-                            // Return a more specific error instead of just throwing
-                            throw RuntimeException("Both primary and fallback API calls failed. Primary: ${e.message}, Fallback: ${fallbackException.message}")
-                        }
+                        Log.e("MainActivity", "API call failed: ${e.message}", e)
+                        throw RuntimeException("API call failed: ${e.message}")
                     }
                 }
                 
@@ -404,6 +395,22 @@ class MainActivity : AppCompatActivity() {
                     
                     audiobooks.addAll(allAudiobooks)
                     Log.d("MainActivity", "Loaded all audiobooks: ${audiobooks.size} total audiobooks")
+                    
+                    // Remove duplicates by keeping only the most recent copy of each title
+                    val dedupedAudiobooks = audiobooks
+                        .groupBy { it.title.trim().lowercase() }
+                        .mapValues { (_, books) -> 
+                            books.maxByOrNull { it.id } // Keep the most recent by ID (assuming newer IDs come later)
+                        }
+                        .values
+                        .filterNotNull()
+                        .toMutableList()
+                    
+                    if (dedupedAudiobooks.size < audiobooks.size) {
+                        Log.d("MainActivity", "Deduplicated: ${audiobooks.size} -> ${dedupedAudiobooks.size} audiobooks")
+                    }
+                    audiobooks.clear()
+                    audiobooks.addAll(dedupedAudiobooks)
                     
                     // Check which audiobooks are already downloaded
                     audiobooks.forEach { audiobook ->

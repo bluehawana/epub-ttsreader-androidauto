@@ -1,0 +1,306 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/background_primary"
+    tools:context=".activities.PlayerActivity">
+
+    <!-- Top App Bar -->
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="?attr/actionBarSize"
+        android:background="@color/primary"
+        android:theme="@style/ThemeOverlay.Material3.Dark"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:navigationIcon="@drawable/ic_arrow_back"
+        app:title="Now Playing"
+        app:titleTextColor="@color/white" />
+
+    <!-- Left Panel: Book Info -->
+    <LinearLayout
+        android:id="@+id/leftPanel"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_marginStart="32dp"
+        android:layout_marginTop="32dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="32dp"
+        android:gravity="center"
+        android:orientation="vertical"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toStartOf="@+id/centerPanel"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/toolbar">
+
+        <!-- Book Cover/Icon (Large for tablets) -->
+        <TextView
+            android:id="@+id/tvBookIcon"
+            android:layout_width="280dp"
+            android:layout_height="280dp"
+            android:background="@drawable/circle_background_primary"
+            android:gravity="center"
+            android:text="📖"
+            android:textSize="140sp" />
+
+        <!-- Book Title -->
+        <TextView
+            android:id="@+id/tvBookTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:gravity="center"
+            android:maxLines="4"
+            android:ellipsize="end"
+            android:textAppearance="?attr/textAppearanceHeadline5"
+            android:textColor="@color/text_primary"
+            android:textStyle="bold"
+            tools:text="How To Win Friends and Influence People" />
+
+        <!-- Author -->
+        <TextView
+            android:id="@+id/tvAuthor"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:gravity="center"
+            android:maxLines="2"
+            android:ellipsize="end"
+            android:textAppearance="?attr/textAppearanceSubtitle1"
+            android:textColor="@color/text_secondary"
+            tools:text="Dale Carnegie" />
+
+        <!-- Chapter Info -->
+        <TextView
+            android:id="@+id/tvChapterInfo"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:gravity="center"
+            android:textAppearance="?attr/textAppearanceHeadline6"
+            android:textColor="@color/text_primary"
+            tools:text="Chapter 1 of 12" />
+
+    </LinearLayout>
+
+    <!-- Center Panel: Progress and Main Controls -->
+    <LinearLayout
+        android:id="@+id/centerPanel"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_marginTop="32dp"
+        android:layout_marginBottom="32dp"
+        android:gravity="center"
+        android:orientation="vertical"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toStartOf="@+id/rightPanel"
+        app:layout_constraintStart_toEndOf="@+id/leftPanel"
+        app:layout_constraintTop_toBottomOf="@+id/toolbar">
+
+        <!-- Progress Section -->
+        <LinearLayout
+            android:id="@+id/progressSection"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="16dp"
+            android:layout_marginBottom="32dp"
+            android:orientation="vertical">
+
+            <!-- Time Labels -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/tvCurrentTime"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textAppearance="?attr/textAppearanceBody2"
+                    android:textColor="@color/text_secondary"
+                    android:textStyle="bold"
+                    tools:text="02:35" />
+
+                <Space
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1" />
+
+                <TextView
+                    android:id="@+id/tvTotalTime"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textAppearance="?attr/textAppearanceBody2"
+                    android:textColor="@color/text_secondary"
+                    android:textStyle="bold"
+                    tools:text="25:42" />
+
+            </LinearLayout>
+
+            <!-- Progress Bar (Larger for tablets) -->
+            <SeekBar
+                android:id="@+id/seekBar"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:progressTint="@color/primary"
+                android:thumbTint="@color/primary"
+                android:minHeight="8dp"
+                tools:progress="15" />
+
+        </LinearLayout>
+
+        <!-- Media Controls (Larger for tablets) -->
+        <LinearLayout
+            android:id="@+id/mediaControls"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="24dp"
+            android:gravity="center"
+            android:orientation="horizontal">
+
+            <!-- Previous Chapter -->
+            <ImageButton
+                android:id="@+id/btnPreviousChapter"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Previous Chapter"
+                android:src="@drawable/ic_skip_previous"
+                app:tint="@color/text_primary" />
+
+            <!-- Rewind 30s -->
+            <ImageButton
+                android:id="@+id/btnRewind"
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:layout_marginStart="20dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Rewind 30 seconds"
+                android:src="@drawable/ic_replay_30"
+                app:tint="@color/text_secondary" />
+
+            <!-- Play/Pause (Large for tablets) -->
+            <com.google.android.material.floatingactionbutton.FloatingActionButton
+                android:id="@+id/btnPlayPause"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="24dp"
+                android:contentDescription="Play/Pause"
+                android:src="@drawable/ic_play"
+                app:backgroundTint="@color/primary"
+                app:fabSize="auto"
+                app:tint="@color/white" />
+
+            <!-- Forward 30s -->
+            <ImageButton
+                android:id="@+id/btnForward"
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:layout_marginEnd="20dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Forward 30 seconds"
+                android:src="@drawable/ic_forward_30"
+                app:tint="@color/text_secondary" />
+
+            <!-- Next Chapter -->
+            <ImageButton
+                android:id="@+id/btnNextChapter"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Next Chapter"
+                android:src="@drawable/ic_skip_next"
+                app:tint="@color/text_primary" />
+
+        </LinearLayout>
+
+        <!-- Playback Speed (Prominent for tablets) -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnSpeed"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="1.0x Speed"
+            android:textColor="@color/primary"
+            app:strokeColor="@color/primary" />
+
+    </LinearLayout>
+
+    <!-- Right Panel: Additional Controls -->
+    <LinearLayout
+        android:id="@+id/rightPanel"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="32dp"
+        android:layout_marginEnd="32dp"
+        android:layout_marginBottom="32dp"
+        android:gravity="center"
+        android:orientation="vertical"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toEndOf="@+id/centerPanel"
+        app:layout_constraintTop_toBottomOf="@+id/toolbar">
+
+        <!-- Additional Controls (Vertical for right panel) -->
+        <LinearLayout
+            android:id="@+id/additionalControls"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <!-- Volume/Mute -->
+            <ImageButton
+                android:id="@+id/btnVolume"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:layout_marginBottom="16dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Volume"
+                android:src="@drawable/ic_volume_up"
+                app:tint="@color/text_primary" />
+
+            <!-- Sleep Timer -->
+            <ImageButton
+                android:id="@+id/btnSleepTimer"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:layout_marginBottom="16dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Sleep Timer"
+                android:src="@drawable/ic_timer"
+                app:tint="@color/text_primary" />
+
+            <!-- Bookmark -->
+            <ImageButton
+                android:id="@+id/btnBookmark"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Bookmark"
+                android:src="@drawable/ic_bookmark_border"
+                app:tint="@color/text_primary" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+    <!-- Chapter List (Hidden by default, can expand over entire screen) -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rvChapters"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="8dp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/toolbar"
+        tools:listitem="@layout/item_chapter" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>

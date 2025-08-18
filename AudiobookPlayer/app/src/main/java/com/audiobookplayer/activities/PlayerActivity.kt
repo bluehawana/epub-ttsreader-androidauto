@@ -125,6 +125,9 @@ class PlayerActivity : AppCompatActivity() {
         btnSleepTimer = findViewById(R.id.btnSleepTimer)
         btnBookmark = findViewById(R.id.btnBookmark)
         
+        // Debug logging
+        android.util.Log.d("PlayerActivity", "Button references - Volume: $btnVolume, Sleep: $btnSleepTimer, Bookmark: $btnBookmark")
+        
         // Setup toolbar
         findViewById<androidx.appcompat.widget.Toolbar>(R.id.toolbar).setNavigationOnClickListener {
             finish()
@@ -138,7 +141,10 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun setupClickListeners() {
+        android.util.Log.d("PlayerActivity", "Setting up click listeners...")
+        
         btnPlayPause.setOnClickListener {
+            android.util.Log.d("PlayerActivity", "Play/Pause button clicked")
             togglePlayPause()
         }
         
@@ -162,16 +168,25 @@ class PlayerActivity : AppCompatActivity() {
             cyclePlaybackSpeed()
         }
         
+        android.util.Log.d("PlayerActivity", "Setting up volume button listener...")
         btnVolume.setOnClickListener {
+            android.util.Log.d("PlayerActivity", "Volume button clicked!")
+            android.widget.Toast.makeText(this, "Volume button works!", android.widget.Toast.LENGTH_SHORT).show()
             toggleMute()
         }
         
+        android.util.Log.d("PlayerActivity", "Setting up sleep timer button listener...")
         btnSleepTimer.setOnClickListener {
-            // TODO: Show sleep timer dialog
+            android.util.Log.d("PlayerActivity", "Sleep timer button clicked!")
+            android.widget.Toast.makeText(this, "Sleep timer button works!", android.widget.Toast.LENGTH_SHORT).show()
+            showSleepTimerDialog()
         }
         
+        android.util.Log.d("PlayerActivity", "Setting up bookmark button listener...")
         btnBookmark.setOnClickListener {
-            // TODO: Add bookmark
+            android.util.Log.d("PlayerActivity", "Bookmark button clicked!")
+            android.widget.Toast.makeText(this, "Bookmark button works!", android.widget.Toast.LENGTH_SHORT).show()
+            addBookmark()
         }
         
         seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
@@ -361,6 +376,45 @@ class PlayerActivity : AppCompatActivity() {
                 android.util.Log.e("PlayerActivity", "Error reloading chapters: ${e.message}")
             }
         }
+    }
+
+    private fun showSleepTimerDialog() {
+        val options = arrayOf("15 minutes", "30 minutes", "45 minutes", "1 hour", "Cancel")
+        val builder = androidx.appcompat.app.AlertDialog.Builder(this)
+        builder.setTitle("Sleep Timer")
+            .setItems(options) { dialog, which ->
+                when (which) {
+                    0 -> setSleepTimer(15 * 60 * 1000L) // 15 minutes
+                    1 -> setSleepTimer(30 * 60 * 1000L) // 30 minutes  
+                    2 -> setSleepTimer(45 * 60 * 1000L) // 45 minutes
+                    3 -> setSleepTimer(60 * 60 * 1000L) // 1 hour
+                    4 -> dialog.dismiss()
+                }
+            }
+        builder.create().show()
+    }
+    
+    private fun setSleepTimer(delayMillis: Long) {
+        android.widget.Toast.makeText(this, "Sleep timer set for ${delayMillis / 60000} minutes", android.widget.Toast.LENGTH_SHORT).show()
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            mediaService?.pause()
+            finish()
+        }, delayMillis)
+    }
+    
+    private fun addBookmark() {
+        val currentPosition = (mediaService?.getCurrentPosition() ?: 0).toLong()
+        val bookmarkText = "Chapter ${currentChapter + 1} at ${formatTime(currentPosition)}"
+        
+        // For now, just show a toast - in a full app, you'd save this to preferences or database
+        android.widget.Toast.makeText(this, "Bookmark added: $bookmarkText", android.widget.Toast.LENGTH_SHORT).show()
+        android.util.Log.d("PlayerActivity", "Bookmark: $bookmarkText")
+    }
+    
+    private fun formatTime(milliseconds: Long): String {
+        val minutes = (milliseconds / 1000) / 60
+        val seconds = (milliseconds / 1000) % 60
+        return String.format("%02d:%02d", minutes, seconds)
     }
 
     override fun onDestroy() {
