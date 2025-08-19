@@ -267,7 +267,7 @@ class PlayerActivity : AppCompatActivity() {
     
     private fun updatePlayPauseButton() {
         val iconRes = if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play
-        btnPlayPause.setImageDrawable(ContextCompat.getDrawable(this, iconRes))
+        btnPlayPause.setImageResource(iconRes)
     }
     
     private fun updateSpeedButton() {
@@ -276,23 +276,34 @@ class PlayerActivity : AppCompatActivity() {
     
     private fun updateVolumeButton() {
         val iconRes = if (isMuted) R.drawable.ic_volume_off else R.drawable.ic_volume_up
-        btnVolume.setImageDrawable(ContextCompat.getDrawable(this, iconRes))
+        btnVolume.setImageResource(iconRes)
     }
 
     private fun togglePlayPause() {
         android.util.Log.d("PlayerActivity", "togglePlayPause() called - current isPlaying: $isPlaying")
         android.util.Log.d("PlayerActivity", "MediaService bound: $isBound, service: $mediaService")
         
-        if (isPlaying) {
-            android.util.Log.d("PlayerActivity", "Calling mediaService.pause()")
-            mediaService?.pause()
-        } else {
-            android.util.Log.d("PlayerActivity", "Calling mediaService.play()")
-            mediaService?.play()
+        if (!isBound || mediaService == null) {
+            android.util.Log.w("PlayerActivity", "MediaService not bound or null, cannot toggle playback")
+            android.widget.Toast.makeText(this, "Audio player not ready, please wait...", android.widget.Toast.LENGTH_SHORT).show()
+            return
         }
-        isPlaying = !isPlaying
-        android.util.Log.d("PlayerActivity", "Updated isPlaying to: $isPlaying")
-        updatePlayPauseButton()
+        
+        try {
+            if (isPlaying) {
+                android.util.Log.d("PlayerActivity", "Calling mediaService.pause()")
+                mediaService?.pause()
+            } else {
+                android.util.Log.d("PlayerActivity", "Calling mediaService.play()")
+                mediaService?.play()
+            }
+            isPlaying = !isPlaying
+            android.util.Log.d("PlayerActivity", "Updated isPlaying to: $isPlaying")
+            updatePlayPauseButton()
+        } catch (e: Exception) {
+            android.util.Log.e("PlayerActivity", "Error toggling playback", e)
+            android.widget.Toast.makeText(this, "Playback error: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+        }
     }
     
     private fun previousChapter() {
@@ -348,12 +359,37 @@ class PlayerActivity : AppCompatActivity() {
     
     private fun toggleMute() {
         isMuted = !isMuted
-        if (isMuted) {
-            audioManager.setStreamMute(AudioManager.STREAM_MUSIC, true)
+        
+        // Use modern AudioManager approach for muting
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+            if (isMuted) {
+                // Store current volume and set to 0
+                val currentVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+                if (currentVolume > 0) {
+                    // Save the current volume for restoration
+                    getSharedPreferences("audiobook_prefs", Context.MODE_PRIVATE)
+                        .edit()
+                        .putInt("saved_volume", currentVolume)
+                        .apply()
+                }
+                audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, 0, 0)
+                android.util.Log.d("PlayerActivity", "Volume muted")
+            } else {
+                // Restore previous volume
+                val savedVolume = getSharedPreferences("audiobook_prefs", Context.MODE_PRIVATE)
+                    .getInt("saved_volume", audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC) / 2)
+                audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, savedVolume, 0)
+                android.util.Log.d("PlayerActivity", "Volume restored to: $savedVolume")
+            }
         } else {
-            audioManager.setStreamMute(AudioManager.STREAM_MUSIC, false)
+            // Fallback for older Android versions
+            @Suppress("DEPRECATION")
+            audioManager.setStreamMute(AudioManager.STREAM_MUSIC, isMuted)
+            android.util.Log.d("PlayerActivity", "Volume ${if (isMuted) "muted" else "unmuted"} (legacy method)")
         }
+        
         updateVolumeButton()
+        android.widget.Toast.makeText(this, if (isMuted) "Audio muted" else "Audio unmuted", android.widget.Toast.LENGTH_SHORT).show()
     }
 
     private fun loadChapterDetails() {
@@ -379,19 +415,31 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun showSleepTimerDialog() {
+        android.util.Log.d("PlayerActivity", "showSleepTimerDialog() called")
         val options = arrayOf("15 minutes", "30 minutes", "45 minutes", "1 hour", "Cancel")
         val builder = androidx.appcompat.app.AlertDialog.Builder(this)
         builder.setTitle("Sleep Timer")
             .setItems(options) { dialog, which ->
+                android.util.Log.d("PlayerActivity", "Sleep timer option selected: $which")
                 when (which) {
                     0 -> setSleepTimer(15 * 60 * 1000L) // 15 minutes
                     1 -> setSleepTimer(30 * 60 * 1000L) // 30 minutes  
                     2 -> setSleepTimer(45 * 60 * 1000L) // 45 minutes
                     3 -> setSleepTimer(60 * 60 * 1000L) // 1 hour
-                    4 -> dialog.dismiss()
+                    4 -> {
+                        android.util.Log.d("PlayerActivity", "Sleep timer cancelled")
+                        dialog.dismiss()
+                    }
                 }
             }
-        builder.create().show()
+        try {
+            val dialog = builder.create()
+            dialog.show()
+            android.util.Log.d("PlayerActivity", "Sleep timer dialog shown successfully")
+        } catch (e: Exception) {
+            android.util.Log.e("PlayerActivity", "Error showing sleep timer dialog", e)
+            android.widget.Toast.makeText(this, "Error showing sleep timer: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+        }
     }
     
     private fun setSleepTimer(delayMillis: Long) {
@@ -403,12 +451,30 @@ class PlayerActivity : AppCompatActivity() {
     }
     
     private fun addBookmark() {
-        val currentPosition = (mediaService?.getCurrentPosition() ?: 0).toLong()
-        val bookmarkText = "Chapter ${currentChapter + 1} at ${formatTime(currentPosition)}"
-        
-        // For now, just show a toast - in a full app, you'd save this to preferences or database
-        android.widget.Toast.makeText(this, "Bookmark added: $bookmarkText", android.widget.Toast.LENGTH_SHORT).show()
-        android.util.Log.d("PlayerActivity", "Bookmark: $bookmarkText")
+        android.util.Log.d("PlayerActivity", "addBookmark() called")
+        try {
+            val currentPosition = (mediaService?.getCurrentPosition() ?: 0).toLong()
+            val bookmarkText = "Chapter ${currentChapter + 1} at ${formatTime(currentPosition)}"
+            
+            // Save bookmark to SharedPreferences
+            val bookmarks = getSharedPreferences("audiobook_prefs", Context.MODE_PRIVATE)
+            val existingBookmarks = bookmarks.getString("bookmarks_${audiobook.id}", "") ?: ""
+            val newBookmarks = if (existingBookmarks.isEmpty()) {
+                bookmarkText
+            } else {
+                "$existingBookmarks\n$bookmarkText"
+            }
+            
+            bookmarks.edit()
+                .putString("bookmarks_${audiobook.id}", newBookmarks)
+                .apply()
+            
+            android.widget.Toast.makeText(this, "Bookmark saved: $bookmarkText", android.widget.Toast.LENGTH_SHORT).show()
+            android.util.Log.d("PlayerActivity", "Bookmark saved: $bookmarkText")
+        } catch (e: Exception) {
+            android.util.Log.e("PlayerActivity", "Error adding bookmark", e)
+            android.widget.Toast.makeText(this, "Error saving bookmark: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+        }
     }
     
     private fun formatTime(milliseconds: Long): String {
