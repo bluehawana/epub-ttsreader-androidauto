@@ -388,6 +388,18 @@ class MediaPlaybackService : Service() {
     fun isPlaying(): Boolean {
         return mediaPlayer?.isPlaying ?: false
     }
+    
+    fun setVolume(volume: Float) {
+        mediaPlayer?.setVolume(volume, volume)
+    }
+    
+    fun mute() {
+        mediaPlayer?.setVolume(0f, 0f)
+    }
+    
+    fun unmute() {
+        mediaPlayer?.setVolume(1f, 1f)
+    }
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

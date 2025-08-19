@@ -360,32 +360,13 @@ class PlayerActivity : AppCompatActivity() {
     private fun toggleMute() {
         isMuted = !isMuted
         
-        // Use modern AudioManager approach for muting
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-            if (isMuted) {
-                // Store current volume and set to 0
-                val currentVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
-                if (currentVolume > 0) {
-                    // Save the current volume for restoration
-                    getSharedPreferences("audiobook_prefs", Context.MODE_PRIVATE)
-                        .edit()
-                        .putInt("saved_volume", currentVolume)
-                        .apply()
-                }
-                audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, 0, 0)
-                android.util.Log.d("PlayerActivity", "Volume muted")
-            } else {
-                // Restore previous volume
-                val savedVolume = getSharedPreferences("audiobook_prefs", Context.MODE_PRIVATE)
-                    .getInt("saved_volume", audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC) / 2)
-                audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, savedVolume, 0)
-                android.util.Log.d("PlayerActivity", "Volume restored to: $savedVolume")
-            }
+        // Mute the MediaPlayer directly for immediate effect
+        if (isMuted) {
+            mediaService?.mute()
+            android.util.Log.d("PlayerActivity", "MediaPlayer muted")
         } else {
-            // Fallback for older Android versions
-            @Suppress("DEPRECATION")
-            audioManager.setStreamMute(AudioManager.STREAM_MUSIC, isMuted)
-            android.util.Log.d("PlayerActivity", "Volume ${if (isMuted) "muted" else "unmuted"} (legacy method)")
+            mediaService?.unmute()
+            android.util.Log.d("PlayerActivity", "MediaPlayer unmuted")
         }
         
         updateVolumeButton()
@@ -443,10 +424,16 @@ class PlayerActivity : AppCompatActivity() {
     }
     
     private fun setSleepTimer(delayMillis: Long) {
-        android.widget.Toast.makeText(this, "Sleep timer set for ${delayMillis / 60000} minutes", android.widget.Toast.LENGTH_SHORT).show()
+        val minutes = delayMillis / 60000
+        android.widget.Toast.makeText(this, "Sleep timer set for $minutes minutes", android.widget.Toast.LENGTH_LONG).show()
+        android.util.Log.d("PlayerActivity", "Sleep timer set for $minutes minutes ($delayMillis ms)")
+        
         android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            android.util.Log.d("PlayerActivity", "Sleep timer expired - pausing playback")
             mediaService?.pause()
-            finish()
+            isPlaying = false
+            updatePlayPauseButton()
+            android.widget.Toast.makeText(this, "Sleep timer expired - playback paused", android.widget.Toast.LENGTH_LONG).show()
         }, delayMillis)
     }
     
@@ -469,6 +456,16 @@ class PlayerActivity : AppCompatActivity() {
                 .putString("bookmarks_${audiobook.id}", newBookmarks)
                 .apply()
             
+            // Update button appearance to show bookmark was saved
+            btnBookmark.setImageResource(R.drawable.ic_bookmark) // Filled bookmark
+            btnBookmark.setColorFilter(ContextCompat.getColor(this, android.R.color.holo_orange_dark))
+            
+            // Reset button appearance after 2 seconds
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                btnBookmark.setImageResource(R.drawable.ic_bookmark_border) // Empty bookmark
+                btnBookmark.clearColorFilter()
+            }, 2000)
+            
             android.widget.Toast.makeText(this, "Bookmark saved: $bookmarkText", android.widget.Toast.LENGTH_SHORT).show()
             android.util.Log.d("PlayerActivity", "Bookmark saved: $bookmarkText")
         } catch (e: Exception) {
@@ -483,8 +480,68 @@ class PlayerActivity : AppCompatActivity() {
         return String.format("%02d:%02d", minutes, seconds)
     }
 
+    override fun onPause() {
+        super.onPause()
+        // Save current playback position for Netflix-style resume
+        savePlaybackPosition()
+    }
+    
+    override fun onResume() {
+        super.onResume()
+        // Restore playback position when returning to the app
+        restorePlaybackPosition()
+    }
+    
+    private fun savePlaybackPosition() {
+        try {
+            val currentPosition = mediaService?.getCurrentPosition() ?: 0
+            val prefs = getSharedPreferences("audiobook_prefs", Context.MODE_PRIVATE)
+            prefs.edit()
+                .putInt("last_position_${audiobook.id}", currentPosition)
+                .putInt("last_chapter_${audiobook.id}", currentChapter)
+                .putLong("last_played_${audiobook.id}", System.currentTimeMillis())
+                .apply()
+            
+            android.util.Log.d("PlayerActivity", "Saved playback position: chapter=$currentChapter, position=${currentPosition}ms")
+        } catch (e: Exception) {
+            android.util.Log.e("PlayerActivity", "Error saving playback position", e)
+        }
+    }
+    
+    private fun restorePlaybackPosition() {
+        try {
+            val prefs = getSharedPreferences("audiobook_prefs", Context.MODE_PRIVATE)
+            val savedPosition = prefs.getInt("last_position_${audiobook.id}", 0)
+            val savedChapter = prefs.getInt("last_chapter_${audiobook.id}", 0)
+            val lastPlayed = prefs.getLong("last_played_${audiobook.id}", 0)
+            
+            // Only restore if played within last 7 days
+            if (savedPosition > 0 && System.currentTimeMillis() - lastPlayed < 7 * 24 * 60 * 60 * 1000) {
+                android.util.Log.d("PlayerActivity", "Restoring playback position: chapter=$savedChapter, position=${savedPosition}ms")
+                
+                // Restore chapter if different
+                if (savedChapter != currentChapter && savedChapter < audiobook.chapters) {
+                    currentChapter = savedChapter
+                    mediaService?.loadChapter(currentChapter)
+                    updateChapterInfo()
+                }
+                
+                // Restore position after a brief delay to allow MediaPlayer to prepare
+                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                    mediaService?.seekTo(savedPosition.toLong())
+                    android.widget.Toast.makeText(this, "Resumed from where you left off", android.widget.Toast.LENGTH_SHORT).show()
+                }, 1000)
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("PlayerActivity", "Error restoring playback position", e)
+        }
+    }
+    
     override fun onDestroy() {
         super.onDestroy()
+        // Save position before destroying
+        savePlaybackPosition()
+        
         if (isBound) {
             unbindService(serviceConnection)
             isBound = false
