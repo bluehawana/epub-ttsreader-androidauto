@@ -157,6 +157,14 @@ class MainActivity : AppCompatActivity() {
             currentUserId = savedUserId
             // Auto-sync on app start
             syncAudiobooks(savedUserId)
+        } else {
+            // Default user ID for testing
+            val defaultUserId = "1141127507"
+            etUserId.setText(defaultUserId)
+            currentUserId = defaultUserId
+            saveUserId(defaultUserId)
+            // Auto-sync with default user ID
+            syncAudiobooks(defaultUserId)
         }
     }
 
@@ -246,90 +254,90 @@ class MainActivity : AppCompatActivity() {
     private fun loadDemoAudiobooks() {
         audiobooks.clear()
         
-        // Create demo chapters for book 1
+        // Create chapters for book 1 with real URLs
         val demoChapters1 = listOf(
             Chapter(
                 chapter = 1,
-                title = "Chapter 1: Introduction",
-                url = "https://demo.audio/ch1.mp3",
-                r2_key = "demo/ch1",
-                duration = 1800
+                title = "How_To_Win_Friends_and_Influenc_split_000.html",
+                url = "https://epub-audiobook-service-ab00bb696e09.herokuapp.com/api/stream/1141127507/21b0e0c0-2885-4d01-8e68-1ca23bb99bfe/chapter_1.mp3",
+                r2_key = "1141127507/21b0e0c0-2885-4d01-8e68-1ca23bb99bfe/chapter_1.mp3",
+                duration = 0
             ),
             Chapter(
                 chapter = 2,
-                title = "Chapter 2: Fundamental Techniques",
-                url = "https://demo.audio/ch2.mp3",
-                r2_key = "demo/ch2",
-                duration = 2100
+                title = "How_To_Win_Friends_and_Influenc_split_001.html", 
+                url = "https://epub-audiobook-service-ab00bb696e09.herokuapp.com/api/stream/1141127507/21b0e0c0-2885-4d01-8e68-1ca23bb99bfe/chapter_2.mp3",
+                r2_key = "1141127507/21b0e0c0-2885-4d01-8e68-1ca23bb99bfe/chapter_2.mp3",
+                duration = 0
             ),
             Chapter(
                 chapter = 3,
-                title = "Chapter 3: Ways to Win People",
-                url = "https://demo.audio/ch3.mp3",
-                r2_key = "demo/ch3",
-                duration = 1950
+                title = "How_To_Win_Friends_and_Influenc_split_002.html",
+                url = "https://epub-audiobook-service-ab00bb696e09.herokuapp.com/api/stream/1141127507/21b0e0c0-2885-4d01-8e68-1ca23bb99bfe/chapter_3.mp3",
+                r2_key = "1141127507/21b0e0c0-2885-4d01-8e68-1ca23bb99bfe/chapter_3.mp3",
+                duration = 0
             ),
             Chapter(
                 chapter = 4,
-                title = "Chapter 4: How to Change People",
-                url = "https://demo.audio/ch4.mp3",
-                r2_key = "demo/ch4",
-                duration = 2200
+                title = "How_To_Win_Friends_and_Influenc_split_003.html",
+                url = "https://epub-audiobook-service-ab00bb696e09.herokuapp.com/api/stream/1141127507/21b0e0c0-2885-4d01-8e68-1ca23bb99bfe/chapter_4.mp3",
+                r2_key = "1141127507/21b0e0c0-2885-4d01-8e68-1ca23bb99bfe/chapter_4.mp3",
+                duration = 0
             )
         )
         
-        // Create demo chapters for book 2
+        // Create chapters for book 2 with real URLs
         val demoChapters2 = listOf(
             Chapter(
                 chapter = 1,
-                title = "Chapter 1: Start",
-                url = "https://demo.audio/lean-ch1.mp3",
-                r2_key = "demo/lean-ch1",
-                duration = 1500
+                title = "OEBPS/Ries_9780307887917_epub_col1_r1.htm",
+                url = "https://epub-audiobook-service-ab00bb696e09.herokuapp.com/api/stream/1141127507/8c12735f-5681-439c-9b3d-68e7017a719e/chapter_1.mp3",
+                r2_key = "1141127507/8c12735f-5681-439c-9b3d-68e7017a719e/chapter_1.mp3",
+                duration = 0
             ),
             Chapter(
                 chapter = 2,
-                title = "Chapter 2: Define",
-                url = "https://demo.audio/lean-ch2.mp3",
-                r2_key = "demo/lean-ch2",
-                duration = 1600
+                title = "OEBPS/Ries_9780307887917_epub_cop_r1.htm",
+                url = "https://epub-audiobook-service-ab00bb696e09.herokuapp.com/api/stream/1141127507/8c12735f-5681-439c-9b3d-68e7017a719e/chapter_2.mp3",
+                r2_key = "1141127507/8c12735f-5681-439c-9b3d-68e7017a719e/chapter_2.mp3",
+                duration = 0
             ),
             Chapter(
                 chapter = 3,
-                title = "Chapter 3: Learn",
-                url = "https://demo.audio/lean-ch3.mp3",
-                r2_key = "demo/lean-ch3",
-                duration = 1700
+                title = "OEBPS/Ries_9780307887917_epub_toc_r1.htm",
+                url = "https://epub-audiobook-service-ab00bb696e09.herokuapp.com/api/stream/1141127507/8c12735f-5681-439c-9b3d-68e7017a719e/chapter_3.mp3",
+                r2_key = "1141127507/8c12735f-5681-439c-9b3d-68e7017a719e/chapter_3.mp3",
+                duration = 0
             ),
             Chapter(
                 chapter = 4,
-                title = "Chapter 4: Experiment",
-                url = "https://demo.audio/lean-ch4.mp3",
-                r2_key = "demo/lean-ch4",
-                duration = 1800
+                title = "OEBPS/Ries_9780307887917_epub_itr_r1.htm",
+                url = "https://epub-audiobook-service-ab00bb696e09.herokuapp.com/api/stream/1141127507/8c12735f-5681-439c-9b3d-68e7017a719e/chapter_4.mp3",
+                r2_key = "1141127507/8c12735f-5681-439c-9b3d-68e7017a719e/chapter_4.mp3",
+                duration = 0
             )
         )
         
-        // Create demo audiobooks with correct constructor parameters
+        // Create audiobooks with real IDs and data
         val demoBook1 = Audiobook(
-            id = "demo-how-to-win-friends",
+            id = "21b0e0c0-2885-4d01-8e68-1ca23bb99bfe",
             title = "How To Win Friends and Influence People",
             author = "Dale Carnegie",
             chapters = 4,
-            created_at = "2025-08-13T09:00:00.000000",
-            download_url = "/api/demo/how-to-win-friends",
+            created_at = "2025-08-18T17:13:33.949031",
+            download_url = "/api/download/21b0e0c0-2885-4d01-8e68-1ca23bb99bfe",
             isDownloaded = false,
             localPath = null,
             chaptersList = demoChapters1
         )
         
         val demoBook2 = Audiobook(
-            id = "demo-lean-startup",
-            title = "The Lean Startup",
+            id = "8c12735f-5681-439c-9b3d-68e7017a719e",
+            title = "The Lean Startup (Eric Ries) (Z-Library)",
             author = "Eric Ries",
             chapters = 24,
-            created_at = "2025-08-13T09:00:00.000000",
-            download_url = "/api/demo/lean-startup",
+            created_at = "2025-08-18T17:13:34.646402",
+            download_url = "/api/download/8c12735f-5681-439c-9b3d-68e7017a719e",
             isDownloaded = false,
             localPath = null,
             chaptersList = demoChapters2

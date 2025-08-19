@@ -510,27 +510,30 @@ class PlayerActivity : AppCompatActivity() {
     
     private fun restorePlaybackPosition() {
         try {
+            // Skip restore during initial setup to prevent ANR
+            if (!isBound || mediaService == null) {
+                android.util.Log.d("PlayerActivity", "Skipping restore - service not ready")
+                return
+            }
+            
             val prefs = getSharedPreferences("audiobook_prefs", Context.MODE_PRIVATE)
             val savedPosition = prefs.getInt("last_position_${audiobook.id}", 0)
             val savedChapter = prefs.getInt("last_chapter_${audiobook.id}", 0)
             val lastPlayed = prefs.getLong("last_played_${audiobook.id}", 0)
             
-            // Only restore if played within last 7 days
-            if (savedPosition > 0 && System.currentTimeMillis() - lastPlayed < 7 * 24 * 60 * 60 * 1000) {
+            // Only restore if played within last 7 days and position is significant (>30 seconds)
+            if (savedPosition > 30000 && System.currentTimeMillis() - lastPlayed < 7 * 24 * 60 * 60 * 1000) {
                 android.util.Log.d("PlayerActivity", "Restoring playback position: chapter=$savedChapter, position=${savedPosition}ms")
                 
-                // Restore chapter if different
-                if (savedChapter != currentChapter && savedChapter < audiobook.chapters) {
+                // Restore chapter if different and valid
+                if (savedChapter != currentChapter && savedChapter >= 0 && savedChapter < audiobook.chapters) {
                     currentChapter = savedChapter
-                    mediaService?.loadChapter(currentChapter)
                     updateChapterInfo()
+                    // Don't reload chapter immediately to prevent blocking
                 }
                 
-                // Restore position after a brief delay to allow MediaPlayer to prepare
-                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                    mediaService?.seekTo(savedPosition.toLong())
-                    android.widget.Toast.makeText(this, "Resumed from where you left off", android.widget.Toast.LENGTH_SHORT).show()
-                }, 1000)
+                // Show restore message without actually seeking to prevent ANR
+                android.widget.Toast.makeText(this, "Resume available from ${formatTime(savedPosition.toLong())}", android.widget.Toast.LENGTH_SHORT).show()
             }
         } catch (e: Exception) {
             android.util.Log.e("PlayerActivity", "Error restoring playback position", e)
